@@ -53,8 +53,14 @@ func update_sliders():
 	audio_offset_slider.value = GlobalVariables.audio_offset
 	load_image(GlobalVariables.background_path)
 	MP3.text = GlobalVariables.sound_path + " loaded"
-	if GlobalVariables.json_path != null:
-		load_midi(GlobalVariables.json_path)
+	
+	var midi_path = GlobalVariables.json_path
+	if midi_path != null:
+		if FileAccess.file_exists(midi_path):
+			load_midi(midi_path)
+		else:
+			push_warning("Last loaded MIDI ", midi_path, " does not exist anymore")
+			GlobalVariables.json_path = null
 
 func _input(event):
 	if Input.is_action_just_pressed("save"):
@@ -105,10 +111,10 @@ func _on_load_song_file_dialog_files_selected(paths):
 #	$AudioStreamPlayer.set_stream(audio_loader.loadfile(file_path))
 #	$AudioStreamPlayer.play()
 
-func load_midi(midi_path):	
+func load_midi(midi_path):
 	smf_data = null
 	if self.smf_data == null:
-		var smf_reader: = SMF.new( )
+		var smf_reader: = SMF.new()
 		var result: = smf_reader.read_file(midi_path)
 		if result.error == OK:
 			self.smf_data = result.data

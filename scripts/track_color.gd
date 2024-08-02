@@ -112,25 +112,33 @@ func _on_file_dialog_2_file_selected(path):
 func set_note_texture():
 	# await get_tree().create_timer(0.1).timeout
 #	print(number)
-	if GlobalVariables.note_texture[str(number)] == "res://assets/sprites/note_texture.png":
-		texture_rect.texture = default_texture
-		texture_rect.custom_minimum_size = texture_rect.texture.get_size()
-#		texture_rect.custom_minimum_size.x = 250
-		texture_rect.custom_minimum_size.y = 18
-		return
-	if GlobalVariables.note_texture[str(number)] == "res://assets/sprites/note_staccato_image.png":
-		texture_rect.texture = default_texture
-		texture_rect.custom_minimum_size = texture_rect.texture.get_size()
-#		texture_rect.custom_minimum_size.x = 250
-		texture_rect.custom_minimum_size.y = 18
-		return
+	var nt = GlobalVariables.note_texture.get(str(number))
+	match nt:
+		"res://assets/sprites/note_texture.png":
+			texture_rect.texture = default_texture
+			texture_rect.custom_minimum_size = texture_rect.texture.get_size()
+			#texture_rect.custom_minimum_size.x = 250
+			texture_rect.custom_minimum_size.y = 18
+			return
+		"res://assets/sprites/note_staccato_image.png":
+			texture_rect.texture = default_texture
+			texture_rect.custom_minimum_size = texture_rect.texture.get_size()
+			#texture_rect.custom_minimum_size.x = 250
+			texture_rect.custom_minimum_size.y = 18
+			return
+		null:
+			push_warning("note texture path is null!")
+			return
+		_:
+			pass
+
+	var image = Image.load_from_file(nt)
 #	var image = Image.new()
 #	var err = image.load(GlobalVariables.note_texture[str(number)])
 #	if err != OK:
 ##		# Failed
 #		print("error loading image :(")
 #		return
-	var image = Image.load_from_file(GlobalVariables.note_texture[str(number)])
 #	texture_rect.texture = ImageTexture.new()
 #	texture_rect.texture.create_from_image(image)
 	texture_rect.texture = ImageTexture.create_from_image(image)

@@ -26,7 +26,15 @@ commits. GPLv3: our changes stay GPLv3 and credit almam.
 
 ## Plan
 1. Run on Godot 4.7 (native file dialogs) ✔
-2. Playback rebuilt so each frame is computed from the song position
-3. Per-project settings keyed by track name, autosave, no quit nag
-4. Export to MP4 with progress
-5. Small fixes (ogg/flac, recent files…), then a Mac .app for DJ D
+2. Playback rebuilt so each frame is computed from the song position ✔
+3. Per-project settings keyed by track name, autosave, no quit nag ✔
+4. Export to MP4 with progress ✔ (ffmpeg bundled; frames force-drawn so a
+   hidden window doesn't stall it)
+5. Mac .app for DJ D ✔ (first build sent 2026-10-20). Not done yet: per-track
+   note edge margins in the UI, FLAC audio, a full-screen preview window.
+
+## Building
+`.tools/build.sh` → `.tools/build/ALMAMPlayer.app` (universal, ffmpeg inside,
+ad-hoc signed; it stops if any script has errors). Zip with
+`ditto -c -k --keepParent`. Command-line render (also a good test):
+`ALMAMPlayer.app/Contents/MacOS/ALMAMPlayer -- --render=song.mid --out=song.mp4`.

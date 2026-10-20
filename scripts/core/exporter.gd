@@ -86,13 +86,16 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 			ok = false
 			break
 		v.time = start + float(i) / fps
-		await RenderingServer.frame_post_draw
+		# drawn now, on purpose: the window's own frames stop when it's
+		# hidden or minimized, and an export must not wait on them
+		RenderingServer.force_draw(false)
 		var img := vp.get_texture().get_image()
 		if img.get_format() != Image.FORMAT_RGBA8:
 			img.convert(Image.FORMAT_RGBA8)
 		pipe.store_buffer(img.get_data())
 		if i % 10 == 0:
 			progress.emit(float(i) / frames)
+			await get_tree().process_frame # the window stays responsive
 	pipe.close()
 	# let ffmpeg finish the file
 	while OS.is_process_running(pid) and not _cancel:

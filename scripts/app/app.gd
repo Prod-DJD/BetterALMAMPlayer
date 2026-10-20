@@ -48,6 +48,14 @@ func _ready() -> void:
 	_exporter.progress.connect(func(p): _export_bar.value = p)
 	_exporter.finished.connect(_on_export_finished)
 	add_child(_exporter)
+	# from the command line: ALMAMPlayer -- --render=song.mid --out=song.mp4
+	var args := {}
+	for a in OS.get_cmdline_user_args():
+		var kv = a.trim_prefix("--").split("=", true, 1)
+		args[kv[0]] = kv[1] if kv.size() > 1 else ""
+	if args.has("render"):
+		_render_and_quit(args["render"], args.get("out", args["render"].get_basename() + ".mp4"))
+		return
 	# the last song, as it was left
 	var last := str(Project.state().get("last", ""))
 	if last != "" and FileAccess.file_exists(last):
@@ -673,12 +681,25 @@ func _export_dialog() -> void:
 	add_child(d)
 	d.popup_centered()
 
+func _render_and_quit(midi: String, out: String) -> void:
+	open_midi(midi)
+	if song == null:
+		printerr("Couldn't read ", midi)
+		get_tree().quit(1)
+		return
+	_exporter.progress.connect(func(p): print("%d%%" % int(p * 100)))
+	_exporter.finished.connect(func(ok, msg):
+		print("done: " if ok else "failed: ", msg)
+		get_tree().quit(0 if ok else 1))
+	_exporter.run(song, project.look, project.audio, out, Exporter.FPS_DEFAULT, _stream.get_length() if _stream else 0.0)
+
 func _on_export_finished(ok: bool, message: String) -> void:
 	_export_bar.visible = false
 	_export_btn.text = "Export video (MP4)…"
 	if ok:
 		_status.text = "Video saved"
-		OS.shell_show_in_file_manager(message)
+		if not Array(OS.get_cmdline_user_args()).any(func(a): return a.begins_with("--render")):
+			OS.shell_show_in_file_manager(message)
 	else:
 		_status.text = message
 

@@ -102,5 +102,7 @@ common/enable_pause_aware_picking=true
 
 [rendering]
 
+textures/vram_compression/import_etc2_astc=true
+
 renderer/rendering_method="gl_compatibility"
 environment/default_environment="res://default_env.tres"

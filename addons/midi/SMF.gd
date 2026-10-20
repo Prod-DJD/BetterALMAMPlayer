@@ -383,7 +383,8 @@ func _read_system_event( stream:StreamPeerBuffer, event_type_byte:int ):
 			MIDISystemEventType.sequence_number:
 				return { "type": MIDISystemEventType.sequence_number, "number": stream.get_u16( ) }
 			MIDISystemEventType.text_event, MIDISystemEventType.copyright, MIDISystemEventType.track_name, MIDISystemEventType.instrument_name, MIDISystemEventType.lyric, MIDISystemEventType.cue_point, MIDISystemEventType.marker:
-				return { "type": MIDISystemEventType.text_event, "text": self._read_string( stream, size ) }
+				# "meta" keeps which kind of text it is (track name, lyric…)
+				return { "type": MIDISystemEventType.text_event, "meta": meta_type, "text": self._read_string( stream, size ) }
 
 			MIDISystemEventType.midi_channel_prefix:
 				if size != 1:

@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="ALMAMPlayer"
-run/main_scene="res://scenes/main_interface.tscn"
+run/main_scene="res://scenes/app.tscn"
 config/use_custom_user_dir=true
 config/custom_user_dir_name="ALMAMPlayer"
 config/features=PackedStringArray("4.1")
@@ -24,24 +24,17 @@ boot_splash/minimum_display_time=100
 
 enable_audio_input=true
 
-[autoload]
-
-GlobalVariables="*res://scripts/global_variables.gd"
-Colors="*res://scenes/colors.tscn"
 
 [debug]
 
 file_logging/enable_file_logging=true
-settings/fps/force_fps=60
 
 [display]
 
-window/size/viewport_width=1920
-window/size/viewport_height=1080
-window/size/window_width_override=1280
-window/size/window_height_override=720
+window/size/viewport_width=1440
+window/size/viewport_height=860
 window/subwindows/embed_subwindows=false
-window/stretch/mode="viewport"
+window/stretch/mode="disabled"
 
 [editor]
 

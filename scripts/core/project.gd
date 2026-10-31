@@ -1,6 +1,6 @@
 ## A song as you work on it: its MIDI, its audio, and its look. Saved by
 ## itself (no "save config" step) in the app's data folder, one file per
-## MIDI, and opened again the next time that MIDI is opened.
+## song file, and opened again the next time that MIDI is opened.
 class_name Project
 extends RefCounted
 
@@ -11,6 +11,8 @@ const LOOKS := "user://looks"
 var midi := ""
 var audio := ""
 var look := Look.new()
+## Note edits, as [method Song.edits] makes them.
+var edits := {}
 
 static func _key(midi_path: String) -> String:
 	return "%s/%s.json" % [DIR, midi_path.md5_text()]
@@ -25,6 +27,8 @@ static func open_for(midi_path: String) -> Project:
 		var d = JSON.parse_string(FileAccess.get_file_as_string(f))
 		if d is Dictionary:
 			p.audio = str(d.get("audio", ""))
+			if d.get("edits") is Dictionary:
+				p.edits = d["edits"]
 			if d.get("look") is Dictionary:
 				p.look = Look.from_dict(d["look"])
 	if p.audio == "" or not FileAccess.file_exists(p.audio):
@@ -45,7 +49,7 @@ func save() -> void:
 	DirAccess.make_dir_recursive_absolute(DIR)
 	var f := FileAccess.open(_key(midi), FileAccess.WRITE)
 	if f:
-		f.store_string(JSON.stringify({"midi": midi, "audio": audio, "look": look.to_dict()}, "\t"))
+		f.store_string(JSON.stringify({"midi": midi, "audio": audio, "edits": edits, "look": look.to_dict()}, "\t"))
 
 # ----- the app's own memory: last song, recent songs -----
 
@@ -118,14 +122,9 @@ static func look_from_old_config(path: String, song: Song) -> Look:
 		var colors: Dictionary = d.get("colors_json", {}) if d.get("colors_json") is Dictionary else {}
 		if colors.has(k):
 			t.color = Color.from_string(str(colors[k]), t.color)
-		for field in [["parallax", "parallax"], ["note_texture", "note_texture"], ["note_effect_texture", "effect_texture"], ["staccato", "staccato"], ["dont_color", "plain"]]:
+		for field in [["parallax", "parallax"], ["staccato", "staccato"]]:
 			var src = d.get(field[0])
 			if src is Dictionary and src.get(k) != null:
 				t.set(field[1], src[k])
-		var m = d.get("note_texture_margins_json", {})
-		if m is Dictionary and m.has(k):
-			var v = str_to_var(str(m[k]))
-			if v is Vector2:
-				t.margins = v
 		l.tracks[song.tracks[i].name] = t
 	return l

@@ -1,7 +1,8 @@
-## ALMAMPlayer's window: the preview in the middle with its transport, the
-## tracks on the left, the scene on the right. Everything saves itself as
-## you go; drop files anywhere (a .mid opens the song, sound becomes its
-## audio, a picture its background, an old config its look).
+## ALMAMPlayer's window: the preview (or the note editor) in the middle with
+## its transport, the tracks on the left, the scene on the right. Everything
+## saves itself as you go; drop files anywhere (a .mid, or an FL Studio /
+## Ableton project, opens the song; sound becomes its audio, a picture its
+## background, an old config its look).
 extends Control
 
 const ACCENT := Color("f7b955")
@@ -27,6 +28,10 @@ var _time_label: Label
 var _seek: HSlider
 var _play_btn: Button
 var _empty: Control
+var _frame: Control
+var _editor: NoteEditor
+var _preview_btn: Button
+var _edit_btn: Button
 var _status: Label
 var _exporter: Exporter
 var _export_bar: ProgressBar
@@ -59,7 +64,7 @@ func _ready() -> void:
 	# the last song, as it was left
 	var last := str(Project.state().get("last", ""))
 	if last != "" and FileAccess.file_exists(last):
-		open_midi(last)
+		open_song(last)
 	else:
 		_show_empty()
 
@@ -117,8 +122,7 @@ func _build() -> void:
 	all_row.add_child(_button("Rainbow", _rainbow, "Colors around the color wheel"))
 	all_row.add_child(_button("Gradient", _gradient, "Colors from the first track's to the last's"))
 	all_row.add_child(_button("Depth", _reset_depth, "Back to the default depth (nearer tracks faster)"))
-	all_row.add_child(_button("Note image…", func(): _pick_image(func(p): _set_all("note_texture", p)), "One note image for every track"))
-	all_row.add_child(_button("Note-on…", func(): _pick_image(func(p): _set_all("effect_texture", p)), "One \"note on\" image for every track"))
+	all_row.add_child(_button("Icons", _auto_icons, "Pick every track's icon from its name and instrument again"))
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -134,12 +138,12 @@ func _build() -> void:
 	cols.add_child(mid)
 	var top := HBoxContainer.new()
 	mid.add_child(top)
-	top.add_child(_button("Open…", _open_dialog, "A MIDI, its sound, a background, or a look (or drop them here)"))
+	top.add_child(_button("Open…", _open_dialog, "A MIDI or an FL Studio / Ableton project, its sound, a background, or a look (or drop them here)"))
 	var recent := MenuButton.new()
 	recent.text = "Recent ▾"
 	recent.flat = false
 	recent.about_to_popup.connect(func(): _fill_recent(recent.get_popup()))
-	recent.get_popup().id_pressed.connect(func(i): open_midi(Project.recent()[i]))
+	recent.get_popup().id_pressed.connect(func(i): open_song(Project.recent()[i]))
 	top.add_child(recent)
 	_title = Label.new()
 	_title.size_flags_horizontal = SIZE_EXPAND_FILL
@@ -147,6 +151,12 @@ func _build() -> void:
 	_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_title.add_theme_font_size_override("font_size", 18)
 	top.add_child(_title)
+	_preview_btn = _button("Preview", func(): _set_mode(false), "See the video as it will export")
+	_preview_btn.toggle_mode = true
+	top.add_child(_preview_btn)
+	_edit_btn = _button("Edit notes", func(): _set_mode(true), "Fix, add and delete notes (Tab)")
+	_edit_btn.toggle_mode = true
+	top.add_child(_edit_btn)
 	_status = Label.new()
 	_status.add_theme_color_override("font_color", TEXT_DIM)
 	top.add_child(_status)
@@ -155,6 +165,15 @@ func _build() -> void:
 	frame.ratio = 16.0 / 9.0
 	frame.size_flags_vertical = SIZE_EXPAND_FILL
 	mid.add_child(frame)
+	_frame = frame
+	_editor = NoteEditor.new()
+	_editor.size_flags_vertical = SIZE_EXPAND_FILL
+	_editor.setup(self)
+	_editor.edited.connect(func(): _changed())
+	_editor.export_requested.connect(_save_midi_dialog)
+	_editor.revert_requested.connect(_revert_edits)
+	_editor.visible = false
+	mid.add_child(_editor)
 	var holder := SubViewportContainer.new()
 	holder.stretch = true
 	frame.add_child(holder)
@@ -169,6 +188,7 @@ func _build() -> void:
 	_empty = _make_empty()
 	frame.add_child(_empty)
 
+	_set_mode(false)
 	var transport := HBoxContainer.new()
 	mid.add_child(transport)
 	transport.add_child(_button("⏮", func(): seek_to(-Exporter.LEAD), "Back to the start"))
@@ -241,16 +261,16 @@ func _make_empty() -> Control:
 	v.add_theme_constant_override("separation", 12)
 	c.add_child(v)
 	var l := Label.new()
-	l.text = "Drop a .mid file here (its sound too), or open one."
+	l.text = "Drop a MIDI file or a project (FL Studio .flp, Ableton .als) here."
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.add_theme_font_size_override("font_size", 20)
 	v.add_child(l)
 	var hint := Label.new()
-	hint.text = "A sound file named like the MIDI (song.mid + song.mp3) is picked up by itself."
+	hint.text = "Every MIDI track is found by itself. A sound file named like the song (song.mid + song.mp3) is picked up too.\nLogic: File ▸ Export ▸ All Tracks as MIDI Files, then drop that."
 	hint.add_theme_color_override("font_color", TEXT_DIM)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(hint)
-	var b := _button("Open a MIDI…", _open_dialog)
+	var b := _button("Open a song…", _open_dialog)
 	b.size_flags_horizontal = SIZE_SHRINK_CENTER
 	v.add_child(b)
 	return c
@@ -262,14 +282,15 @@ func _show_empty() -> void:
 
 # ---------------------------------------------------------------- songs
 
-func open_midi(path: String) -> void:
-	var s := Song.load_file(path)
+func open_song(path: String) -> void:
+	var s := Importer.load_song(path)
 	if s == null:
-		_flash("That MIDI couldn't be read.")
+		_flash(Importer.last_error)
 		return
 	_stop()
 	song = s
 	project = Project.open_for(path)
+	song.apply_edits(project.edits)
 	Project.remember(path)
 	_apply_project()
 
@@ -283,6 +304,7 @@ func _apply_project() -> void:
 	_title.text = project.midi.get_file().get_basename()
 	_rebuild_tracks()
 	_rebuild_scene()
+	_editor.open_song(song, project.look)
 	seek_to(-Exporter.LEAD)
 	_changed()
 
@@ -399,6 +421,16 @@ func _unhandled_input(e: InputEvent) -> void:
 			KEY_O:
 				if e.meta_pressed or e.ctrl_pressed:
 					_open_dialog()
+			KEY_TAB:
+				_set_mode(not _editor.visible)
+				accept_event()
+			KEY_Z:
+				if (e.meta_pressed or e.ctrl_pressed) and _editor.visible:
+					if e.shift_pressed:
+						_editor.canvas.redo()
+					else:
+						_editor.canvas.undo()
+					accept_event()
 			KEY_F11, KEY_F:
 				if e.keycode == KEY_F11 or e.meta_pressed:
 					var w := get_window()
@@ -417,6 +449,8 @@ func _changed(textures := false) -> void:
 
 func _save_now() -> void:
 	if project:
+		if song:
+			project.edits = song.edits()
 		project.save()
 		_status.text = "Saved"
 
@@ -431,7 +465,7 @@ func _open_dialog() -> void:
 	d.file_mode = FileDialog.FILE_MODE_OPEN_FILES
 	d.access = FileDialog.ACCESS_FILESYSTEM
 	d.filters = PackedStringArray([
-		"*.mid, *.midi, *.mp3, *.wav, *.ogg, *.png, *.jpg, *.jpeg, *.webp, *.json ; MIDI, sound, pictures, looks",
+		"*.mid, *.midi, *.flp, *.als, *.logicx, *.mp3, *.wav, *.ogg, *.png, *.jpg, *.jpeg, *.webp, *.json ; Songs, projects, sound, pictures, looks",
 	])
 	d.files_selected.connect(_on_files_dropped)
 	add_child(d)
@@ -448,27 +482,23 @@ func _pick_image(then: Callable) -> void:
 	d.popup_centered()
 
 func _on_files_dropped(files: PackedStringArray) -> void:
-	# the MIDI first, so sound and pictures dropped with it land on it
+	# the song first, so sound and pictures dropped with it land on it
 	var sorted := Array(files)
 	sorted.sort_custom(func(a, b): return _is_midi(a) and not _is_midi(b))
 	for f in sorted:
 		var low: String = f.to_lower()
 		if _is_midi(f):
-			open_midi(f)
+			open_song(f)
 		elif project == null:
-			_flash("Open a MIDI first.")
+			_flash("Open a song first.")
 		elif low.ends_with(".mp3") or low.ends_with(".wav") or low.ends_with(".ogg"):
 			_stop()
 			_load_audio(f)
 			_changed()
 		elif low.ends_with(".png") or low.ends_with(".jpg") or low.ends_with(".jpeg") or low.ends_with(".webp"):
-			var row := _track_row_under_mouse()
-			if row:
-				row.drop_image(f)
-			else:
-				project.look.background = f
-				_rebuild_scene()
-				_changed()
+			project.look.background = f
+			_rebuild_scene()
+			_changed(true)
 		elif low.ends_with(".json"):
 			var l := Project.look_from_old_config(f, song)
 			if l:
@@ -479,14 +509,7 @@ func _on_files_dropped(files: PackedStringArray) -> void:
 				_flash("That file isn't a look.")
 
 func _is_midi(f: String) -> bool:
-	var low := f.to_lower()
-	return low.ends_with(".mid") or low.ends_with(".midi")
-
-func _track_row_under_mouse() -> TrackRow:
-	for r in _tracks_box.get_children():
-		if r is TrackRow and r.get_global_rect().has_point(get_global_mouse_position()):
-			return r
-	return null
+	return Importer.is_song_file(f)
 
 func _fill_recent(menu: PopupMenu) -> void:
 	menu.clear()
@@ -506,7 +529,7 @@ func _rebuild_tracks() -> void:
 	for i in n:
 		var tr: Song.Track = song.tracks[i]
 		var row := TrackRow.new()
-		row.setup(self, tr, project.look.track_look(tr.name, i, n))
+		row.setup(self, tr, project.look.track_look(tr.name, i, n), i)
 		_tracks_box.add_child(row)
 
 func _each_track(f: Callable) -> void:
@@ -530,8 +553,8 @@ func _gradient() -> void:
 func _reset_depth() -> void:
 	_each_track(func(tl, i, n): tl.parallax = Look.default_track(i, n).parallax)
 
-func _set_all(field: String, path: String) -> void:
-	_each_track(func(tl, _i, _n): tl.set(field, path))
+func _auto_icons() -> void:
+	_each_track(func(tl, _i, _n): tl.icon = "")
 
 # ---------------------------------------------------------------- scene
 
@@ -548,6 +571,8 @@ func _rebuild_scene() -> void:
 	_slider("Lowest note sits at", 0, 700, 1, -l.vertical_offset, func(v): l.vertical_offset = -v, "px up")
 	_slider("Velocity effect", 0, 1, 0.01, l.velocity_strength, func(v): l.velocity_strength = v)
 	_slider("Pitch bend", 0, 2, 0.01, l.pitch_bend_strength, func(v): l.pitch_bend_strength = v)
+	_slider("Glow", 0, 1.5, 0.01, l.glow, func(v): l.glow = v)
+	_slider("Note thickness", 0.4, 2.0, 0.01, l.thickness, func(v): l.thickness = v, "×")
 	_slider("Audio delay", -1000, 1000, 5, l.audio_offset * 1000.0, func(v): l.audio_offset = v / 1000.0, "ms")
 	var sq := CheckButton.new()
 	sq.text = "Square video (1080×1080)"
@@ -606,7 +631,7 @@ func _rebuild_scene() -> void:
 	_scene_box.add_child(lrow)
 
 	var keys := Label.new()
-	keys.text = "\nSpace: play / pause · ← →: 5 s · Home: start · ⌘F: full screen\nRight-click a track's image: back to the default."
+	keys.text = "\nSpace: play / pause · ← →: 5 s · Home: start · Tab: edit notes · ⌘F: full screen"
 	keys.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	keys.add_theme_color_override("font_color", TEXT_DIM)
 	keys.add_theme_font_size_override("font_size", 12)
@@ -656,6 +681,53 @@ func _save_look_dialog() -> void:
 	d.popup_centered(Vector2i(360, 100))
 	e.grab_focus()
 
+# ---------------------------------------------------------------- editing
+
+func _set_mode(editing: bool) -> void:
+	_frame.visible = not editing
+	_editor.visible = editing
+	_preview_btn.set_pressed_no_signal(not editing)
+	_edit_btn.set_pressed_no_signal(editing)
+	if editing and song:
+		_editor.canvas.queue_redraw()
+
+## The editor, on track [i] (the "Edit" button on a track).
+func edit_track(i: int) -> void:
+	_set_mode(true)
+	_editor.show_track(i)
+
+func _save_midi_dialog() -> void:
+	if song == null:
+		return
+	var d := FileDialog.new()
+	d.use_native_dialog = true
+	d.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+	d.access = FileDialog.ACCESS_FILESYSTEM
+	d.filters = PackedStringArray(["*.mid ; MIDI file"])
+	d.current_file = _title.text + " (edited).mid"
+	d.current_dir = project.midi.get_base_dir()
+	d.file_selected.connect(func(p):
+		if not p.to_lower().ends_with(".mid"):
+			p += ".mid"
+		var err := song.save_midi(p)
+		_flash("MIDI saved" if err == OK else "Couldn't save that MIDI."))
+	add_child(d)
+	d.popup_centered()
+
+## Throws every edit away: the song is read from its file again.
+func _revert_edits() -> void:
+	if song == null or not song.has_edits():
+		return
+	var d := ConfirmationDialog.new()
+	d.dialog_text = "Throw away every note edit in this song and go back to the file?"
+	d.confirmed.connect(func():
+		project.edits = {}
+		project.save()
+		open_song(project.midi)
+		_flash("Edits reverted"))
+	add_child(d)
+	d.popup_centered()
+
 # ---------------------------------------------------------------- export
 
 func _export_dialog() -> void:
@@ -682,7 +754,7 @@ func _export_dialog() -> void:
 	d.popup_centered()
 
 func _render_and_quit(midi: String, out: String) -> void:
-	open_midi(midi)
+	open_song(midi)
 	if song == null:
 		printerr("Couldn't read ", midi)
 		get_tree().quit(1)

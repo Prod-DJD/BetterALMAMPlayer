@@ -38,3 +38,34 @@ commits. GPLv3: our changes stay GPLv3 and credit almam.
 ad-hoc signed; it stops if any script has errors). Zip with
 `ditto -c -k --keepParent`. Command-line render (also a good test):
 `ALMAMPlayer.app/Contents/MacOS/ALMAMPlayer -- --render=song.mid --out=song.mp4`.
+
+## Makeover (2026-10-31, from DJ D; more to be added)
+Done, in the code (see git log):
+1. Everything drawn by math, no pictures: notes are rounded shapes (Pill /
+   Soft / Sharp, or dots) with a highlight and a glow while they play, the
+   "note on" pop is a drawn halo + ring, the instrument icons are drawn
+   (scripts/core/icons.gd, picked from the track's name or General MIDI
+   program, changeable per track). The hearts and every note/effect PNG
+   are gone. Old saved looks still load (missing fields get defaults).
+2. Note editor (Edit notes / Tab): piano roll with select, move, resize,
+   add (double-click), delete, box select, click a piano key to select a
+   pitch (keyswitches), velocity, snap, undo/redo, Save MIDI…, Revert all.
+   Edits are saved with the song as a difference from the file
+   (Song.edits / apply_edits), so the original is never changed.
+3. Import: .mid, FL Studio .flp (scripts/core/flp_reader.gd), Ableton .als
+   (ableton_reader.gd): every track found automatically.
+   Limits: first tempo only (no tempo automation), audio clips ignored,
+   written from the file-format layout and tested on synthetic files only:
+   needs a real .flp / .als to confirm.
+4. Logic (.logicx): no documented format and no converter found; the app
+   says to use File > Export > All Tracks as MIDI Files. If DJ D names the
+   FLP-to-Logic converter he means, look at how it reads the package.
+
+Tests (not in git, in .tools/): `.tools/godot.sh --headless --path . -s
+.tools/test_core.gd` (importers, edits, MIDI round trip) and `test_app.gd`
+(the whole app, editing, reopening). Screenshots can't be taken from the
+Claude sandbox (it blocks windows); run `.tools/shot_main.gd` yourself.
+
+Still open: per-track note edge margins are gone with the images (not
+needed); FLAC audio; a full-screen preview window; Reaper / MusicXML
+import; add new requests here.

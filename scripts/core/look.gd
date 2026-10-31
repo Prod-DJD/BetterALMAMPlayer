@@ -54,6 +54,8 @@ var square := false
 var background := ""
 ## Track name → TrackLook
 var tracks := {}
+## Track names in the order the person put them (empty: the file's order).
+var order: Array = []
 
 ## The look for [track] number [i] of [count]: saved, or a default
 ## (colors around the wheel, nearer tracks faster).
@@ -80,7 +82,7 @@ func to_dict() -> Dictionary:
 		"top_margin": top_margin, "velocity_strength": velocity_strength,
 		"pitch_bend_strength": pitch_bend_strength, "audio_offset": audio_offset,
 			"glow": glow, "thickness": thickness,
-		"square": square, "background": background, "tracks": tr,
+		"square": square, "background": background, "tracks": tr, "order": order,
 	}
 
 static func from_dict(d: Dictionary) -> Look:
@@ -95,6 +97,10 @@ static func from_dict(d: Dictionary) -> Look:
 	l.thickness = float(d.get("thickness", l.thickness))
 	l.square = bool(d.get("square", false))
 	l.background = str(d.get("background", ""))
+	var o = d.get("order", [])
+	if o is Array:
+		for name in o:
+			l.order.append(str(name))
 	var tr = d.get("tracks", {})
 	if tr is Dictionary:
 		var i := 0

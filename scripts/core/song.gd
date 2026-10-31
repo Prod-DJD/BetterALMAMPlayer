@@ -128,6 +128,20 @@ func finish() -> void:
 	for tr in tracks:
 		_pristine[tr.name] = _counts(tr)
 
+## Puts the tracks in [names] order; any not named stay after, in theirs.
+func reorder(names: Array) -> void:
+	var rank := {}
+	for i in names.size():
+		rank[str(names[i])] = i
+	var rest := tracks.size()
+	var keyed := []
+	for t in tracks:
+		keyed.append([rank.get(t.name, rest), t])
+	keyed.sort_custom(func(a, b): return a[0] < b[0])
+	tracks.clear()
+	for k in keyed:
+		tracks.append(k[1])
+
 ## Re-works the note order, range and length after the notes changed.
 func refresh() -> void:
 	lowest = 127

@@ -54,6 +54,18 @@ func setup(the_app, t: Song.Track, look: Look.TrackLook, i := 0) -> void:
 	name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	name.clip_text = true
 	row.add_child(name)
+	var up := Button.new()
+	up.text = "▲"
+	up.tooltip_text = "Move this track up"
+	up.disabled = i == 0
+	up.pressed.connect(func(): app.move_track(index, -1))
+	row.add_child(up)
+	var down := Button.new()
+	down.text = "▼"
+	down.tooltip_text = "Move this track down"
+	down.disabled = i == app.song.tracks.size() - 1
+	down.pressed.connect(func(): app.move_track(index, 1))
+	row.add_child(down)
 	var edit := Button.new()
 	edit.text = "Edit"
 	edit.tooltip_text = "Edit this track's notes"

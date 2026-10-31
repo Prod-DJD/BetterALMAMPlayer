@@ -291,6 +291,7 @@ func open_song(path: String) -> void:
 	song = s
 	project = Project.open_for(path)
 	song.apply_edits(project.edits)
+	song.reorder(project.look.order)
 	Project.remember(path)
 	_apply_project()
 
@@ -406,12 +407,20 @@ func _update_transport() -> void:
 	var l := _length()
 	_time_label.text = "%d:%02d / %d:%02d" % [int(t) / 60, int(t) % 60, int(l) / 60, int(l) % 60]
 
+## Space plays and pauses wherever the focus is, so a focused button can't
+## take it (a button used to, so playback needed the key held down). Typing
+## in a text box keeps its spaces.
+func _input(e: InputEvent) -> void:
+	if e is InputEventKey and e.pressed and not e.echo and e.keycode == KEY_SPACE:
+		var f := get_viewport().gui_get_focus_owner()
+		if f is LineEdit or f is TextEdit:
+			return
+		toggle_play()
+		get_viewport().set_input_as_handled()
+
 func _unhandled_input(e: InputEvent) -> void:
 	if e is InputEventKey and e.pressed and not e.echo:
 		match e.keycode:
-			KEY_SPACE:
-				toggle_play()
-				accept_event()
 			KEY_LEFT:
 				seek_to(vis.time - 5.0)
 			KEY_RIGHT:
@@ -531,6 +540,22 @@ func _rebuild_tracks() -> void:
 		var row := TrackRow.new()
 		row.setup(self, tr, project.look.track_look(tr.name, i, n), i)
 		_tracks_box.add_child(row)
+
+## Moves track [i] up (-1) or down (+1) in the list, the song and the scene.
+func move_track(i: int, step: int) -> void:
+	var j := i + step
+	if song == null or j < 0 or j >= song.tracks.size():
+		return
+	var t: Song.Track = song.tracks[i]
+	song.tracks[i] = song.tracks[j]
+	song.tracks[j] = t
+	project.look.order = []
+	for tr in song.tracks:
+		project.look.order.append(tr.name)
+	_rebuild_tracks()
+	_editor.open_song(song, project.look)
+	_changed(true)
+	_save_now() # not left to the timer: an order change must survive a quick reopen
 
 func _each_track(f: Callable) -> void:
 	var n := song.tracks.size()

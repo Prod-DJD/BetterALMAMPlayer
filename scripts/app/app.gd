@@ -210,7 +210,7 @@ func _build() -> void:
 
 	_export_row = HBoxContainer.new()
 	mid.add_child(_export_row)
-	_export_btn = _button("Export video (MP4)…", _export_dialog, "1080p, 60 fps, with the song's audio")
+	_export_btn = _button("Export video…", _export_dialog, "1080p, 60 fps, with the song's audio. .mov keeps a transparent background (no keying needed)")
 	_export_row.add_child(_export_btn)
 	_export_bar = ProgressBar.new()
 	_export_bar.size_flags_horizontal = SIZE_EXPAND_FILL
@@ -738,12 +738,12 @@ func _export_dialog() -> void:
 	d.use_native_dialog = true
 	d.file_mode = FileDialog.FILE_MODE_SAVE_FILE
 	d.access = FileDialog.ACCESS_FILESYSTEM
-	d.filters = PackedStringArray(["*.mp4 ; MP4 video"])
-	d.current_file = _title.text + ".mp4"
+	d.filters = PackedStringArray(["*.mov ; QuickTime, transparent background (ProRes 4444 with alpha)", "*.mp4 ; MP4 video, black background"])
+	d.current_file = _title.text + ".mov"
 	d.current_dir = project.midi.get_base_dir()
 	d.file_selected.connect(func(p):
-		if not p.to_lower().ends_with(".mp4"):
-			p += ".mp4"
+		if not (p.to_lower().ends_with(".mov") or p.to_lower().ends_with(".mp4")):
+			p += ".mov"
 		_stop()
 		_export_bar.value = 0
 		_export_bar.visible = true
@@ -767,7 +767,7 @@ func _render_and_quit(midi: String, out: String) -> void:
 
 func _on_export_finished(ok: bool, message: String) -> void:
 	_export_bar.visible = false
-	_export_btn.text = "Export video (MP4)…"
+	_export_btn.text = "Export video…"
 	if ok:
 		_status.text = "Video saved"
 		if not Array(OS.get_cmdline_user_args()).any(func(a): return a.begins_with("--render")):

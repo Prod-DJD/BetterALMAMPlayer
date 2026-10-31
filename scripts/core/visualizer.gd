@@ -18,6 +18,9 @@ const PLAYHEAD := WIDTH / 2.0
 
 var song: Song
 var look: Look
+## Draw on nothing: no black, no background picture, so the frame's
+## transparent parts stay transparent (for an alpha video).
+var transparent := false
 ## Seconds into the song (negative: before it starts; the tracks rise in).
 var time := 0.0:
 	set(v):
@@ -69,10 +72,12 @@ static func _ease(x: float) -> float:
 	return 0.5 - 0.5 * cos(PI * x) # sine in-out, as the original's tweens
 
 func _draw() -> void:
-	draw_rect(Rect2(0, 0, WIDTH, HEIGHT), Color.BLACK)
+	if not transparent:
+		draw_rect(Rect2(0, 0, WIDTH, HEIGHT), Color.BLACK)
 	if look == null:
 		return
-	_draw_background()
+	if not transparent:
+		_draw_background()
 	if song == null:
 		return
 	var count := song.tracks.size()

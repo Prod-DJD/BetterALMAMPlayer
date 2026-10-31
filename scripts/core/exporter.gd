@@ -1,6 +1,9 @@
-## Renders a song to an MP4: each frame is drawn at its exact time and
+## Renders a song to a video: each frame is drawn at its exact time and
 ## handed straight to ffmpeg, which adds the song's own audio file (not a
 ## recording of it). No second app, no giant AVI, and it can be stopped.
+## A .mov is written with an alpha channel (ProRes 4444): the notes are
+## drawn over nothing, so they drop straight onto other footage with no
+## keying. Any other name (.mp4) is a normal video on black.
 class_name Exporter
 extends Node
 
@@ -31,6 +34,9 @@ static func ffmpeg_path() -> String:
 func cancel() -> void:
 	_cancel = true
 
+static func wants_alpha(out: String) -> bool:
+	return out.to_lower().ends_with(".mov")
+
 ## Renders [song] with [look] (and [audio], if any) to [out] at [fps].
 func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT, audio_length := 0.0) -> void:
 	if running:
@@ -44,11 +50,13 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 	var vp := SubViewport.new()
 	vp.size = Vector2i(1920, 1080)
 	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	vp.transparent_bg = false
+	var alpha := wants_alpha(out)
+	vp.transparent_bg = alpha
 	add_child(vp)
 	var v := Visualizer.new()
 	v.song = song
 	v.look = look
+	v.transparent = alpha
 	vp.add_child(v)
 
 	var start := -LEAD
@@ -68,10 +76,14 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 		args.append_array(["-map", "0:v", "-map", "1:a", "-c:a", "aac", "-b:a", "320k"])
 	if look.square:
 		args.append_array(["-vf", "crop=1080:1080"])
-	args.append_array([
-		"-c:v", "libx264", "-preset", "medium", "-crf", "16", "-pix_fmt", "yuv420p",
-		"-movflags", "+faststart", "-t", "%.3f" % (end - start), out,
-	])
+	if alpha:
+		# ProRes 4444 with alpha: Final Cut, Premiere, Resolve and After Effects read it
+		args.append_array(["-c:v", "prores_ks", "-profile:v", "4444", "-pix_fmt", "yuva444p10le",
+				"-alpha_bits", "16", "-vendor", "apl0"])
+	else:
+		args.append_array(["-c:v", "libx264", "-preset", "medium", "-crf", "16", "-pix_fmt", "yuv420p",
+				"-movflags", "+faststart"])
+	args.append_array(["-t", "%.3f" % (end - start), out])
 	var proc := OS.execute_with_pipe(ff, args)
 	if proc.is_empty():
 		running = false
@@ -90,6 +102,9 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 		# hidden or minimized, and an export must not wait on them
 		RenderingServer.force_draw(false)
 		var img := vp.get_texture().get_image()
+		if img == null: # no renderer (a headless run): nothing to draw with
+			ok = false
+			break
 		if img.get_format() != Image.FORMAT_RGBA8:
 			img.convert(Image.FORMAT_RGBA8)
 		pipe.store_buffer(img.get_data())

@@ -99,6 +99,21 @@ func setup(the_app, t: Song.Track, look: Look.TrackLook, i := 0) -> void:
 	stacc.toggled.connect(func(on): tl.staccato = on; app._changed())
 	row2.add_child(stacc)
 
+## Hold a track and drag it up or down the list to move it.
+func _get_drag_data(_at: Vector2) -> Variant:
+	var preview := PanelContainer.new()
+	var name_label := Label.new()
+	name_label.text = "  " + track.name + "  "
+	preview.add_child(name_label)
+	set_drag_preview(preview)
+	return {"track_row": index}
+
+func _can_drop_data(_at: Vector2, data: Variant) -> bool:
+	return data is Dictionary and data.has("track_row") and data["track_row"] != index
+
+func _drop_data(_at: Vector2, data: Variant) -> void:
+	app.move_track_to(data["track_row"], index)
+
 func _current_icon() -> String:
 	return tl.icon if tl.icon != "" else Icons.guess(track.name, track.program)
 

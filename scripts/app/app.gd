@@ -541,14 +541,17 @@ func _rebuild_tracks() -> void:
 		row.setup(self, tr, project.look.track_look(tr.name, i, n), i)
 		_tracks_box.add_child(row)
 
-## Moves track [i] up (-1) or down (+1) in the list, the song and the scene.
+## Moves track [i] up (-1) or down (+1) in the list.
 func move_track(i: int, step: int) -> void:
-	var j := i + step
-	if song == null or j < 0 or j >= song.tracks.size():
+	move_track_to(i, i + step)
+
+## Moves track [from] to position [to] in the list, the song and the scene.
+func move_track_to(from: int, to: int) -> void:
+	if song == null or from == to or from < 0 or to < 0 or from >= song.tracks.size() or to >= song.tracks.size():
 		return
-	var t: Song.Track = song.tracks[i]
-	song.tracks[i] = song.tracks[j]
-	song.tracks[j] = t
+	var t: Song.Track = song.tracks[from]
+	song.tracks.remove_at(from)
+	song.tracks.insert(to, t)
 	project.look.order = []
 	for tr in song.tracks:
 		project.look.order.append(tr.name)

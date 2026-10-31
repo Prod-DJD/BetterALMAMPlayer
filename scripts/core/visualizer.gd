@@ -3,11 +3,12 @@
 ## nothing waits on timers, so the live preview, seeking and the exported
 ## video always agree with the audio, frame for frame.
 ##
-## The look matches the original ALMAMPlayer: notes scroll right to left
-## past the middle of a 1920×1080 frame; a note lights up, dips and swells
-## a little as it plays (more with velocity), its "note on" image pops at
+## The motion matches the original ALMAMPlayer: notes scroll right to left
+## past the middle of a 1920×1080 frame; a note lights up, glows, dips and
+## swells a little as it plays (more with velocity), a drawn pulse pops at
 ## the playhead, pitch bends shift the playing notes, and tracks with more
-## parallax move faster and sit in front.
+## parallax move faster and sit in front. Everything is drawn from shapes,
+## never from pictures, so it is sharp at any size.
 class_name Visualizer
 extends Node2D
 
@@ -23,15 +24,21 @@ var time := 0.0:
 		time = v
 		queue_redraw()
 
-var _tex_cache := {} # path → Texture2D (or null if it couldn't load)
-var _boxes := {} # track name → StyleBoxTexture
+var _tex_cache := {} # path → Texture2D (the background picture only)
 var _background: Texture2D
 var _background_path := "?"
+var _body := StyleBoxFlat.new()
+var _sheen := StyleBoxFlat.new()
+
+func _init() -> void:
+	_body.anti_aliasing = true
+	_body.shadow_offset = Vector2.ZERO
+	_sheen.anti_aliasing = true
 
 ## Call after the song or look changed in ways that need reloading
-## (textures, background, margins).
+## (the background picture).
 func refresh() -> void:
-	_boxes.clear()
+	_background_path = "?"
 	queue_redraw()
 
 func texture(path: String) -> Texture2D:
@@ -40,33 +47,22 @@ func texture(path: String) -> Texture2D:
 	if _tex_cache.has(path):
 		return _tex_cache[path]
 	var t: Texture2D = null
-	if path.begins_with("res://"):
-		t = load(path)
-	elif FileAccess.file_exists(path):
+	if FileAccess.file_exists(path):
 		var img := Image.load_from_file(path)
 		if img != null:
 			t = ImageTexture.create_from_image(img)
 	_tex_cache[path] = t
 	return t
 
-func _box(name: String, tl: Look.TrackLook) -> StyleBoxTexture:
-	if _boxes.has(name):
-		return _boxes[name]
-	var b := StyleBoxTexture.new()
-	b.texture = texture(tl.note_texture)
-	if b.texture == null:
-		b.texture = load(Look.DEFAULT_NOTE)
-	b.texture_margin_left = tl.margins.x
-	b.texture_margin_right = tl.margins.y
-	b.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_TILE_FIT
-	_boxes[name] = b
-	return b
-
 func spacing() -> float:
 	if song == null:
 		return 10.0
 	var span: float = max(1, song.highest - song.lowest)
 	return (look.vertical_offset + look.top_margin) / span
+
+## How thick the notes are: follows the spacing between pitches.
+func note_height() -> float:
+	return clampf(spacing() * 0.86 * look.thickness, 6.0, 44.0)
 
 static func _ease(x: float) -> float:
 	x = clampf(x, 0.0, 1.0)
@@ -88,6 +84,7 @@ func _draw() -> void:
 	order.sort_custom(func(a, b): return a[0].parallax < b[0].parallax)
 	var base_y := HEIGHT + look.vertical_offset
 	var gap := spacing()
+	var note_h := note_height()
 	# the tracks rise in over the first second
 	var intro := _ease((time + 1.0) / 0.5)
 	var intro_y := 128.0 * (1.0 - _ease((time + 1.5) / 1.0))
@@ -98,10 +95,8 @@ func _draw() -> void:
 		if not tl.visible:
 			continue
 		var px_per_s: float = look.speed * tl.parallax
-		var color: Color = Color.WHITE if tl.plain else tl.color
-		var box := _box(tr.name, tl)
-		var stacc: Texture2D = texture(Look.DEFAULT_STACCATO) if tl.staccato else null
-		var note_h: float = box.texture.get_height()
+		var color: Color = tl.color
+		var radius: float = [note_h / 2.0, note_h * 0.28, 2.0][tl.shape]
 		var bend := Song.bend_at(tr, time) * 4.0 * gap * look.pitch_bend_strength
 		# notes whose rectangle can reach the screen
 		var from_t := time - PLAYHEAD / px_per_s - tr.longest - 0.5
@@ -114,7 +109,7 @@ func _draw() -> void:
 				break
 			var dur: float = n.end - n.start if not tl.staccato else 0.1
 			var x := PLAYHEAD + (n.start - time) * px_per_s
-			var w: float = stacc.get_width() if stacc else max(dur * px_per_s, 2.0)
+			var w: float = note_h * 1.2 if tl.staccato else max(dur * px_per_s, note_h * 0.9)
 			if x + w < 0:
 				continue
 			var y := base_y - (n.pitch - song.lowest) * gap + intro_y
@@ -138,19 +133,26 @@ func _draw() -> void:
 			if dur > 1.0 and on > 0.0:
 				var fade := lerpf(1.0, 0.941, clampf(on / 1.494, 0.0, 1.0))
 				c = Color(c.r * fade, c.g * fade, c.b * fade, c.a)
-			var top := y + dip - note_h / 2.0
+			var lit := light / 0.3
 			draw_set_transform(Vector2(x, y + dip), 0.0, Vector2.ONE * (1.0 + swell))
-			if stacc:
-				draw_texture_rect(stacc, Rect2(0, -stacc.get_height() / 2.0, w, stacc.get_height()), false, c)
+			_body.bg_color = c
+			_body.set_corner_radius_all(int(w / 2.0) if tl.staccato else int(radius))
+			if lit > 0.02 and look.glow > 0.01:
+				_body.shadow_color = Color(color.r, color.g, color.b, 0.5 * look.glow * lit * intro)
+				_body.shadow_size = int(16.0 * look.glow * lit)
 			else:
-				box.modulate_color = c
-				draw_style_box(box, Rect2(0, -note_h / 2.0, w, note_h))
+				_body.shadow_size = 0
+			draw_style_box(_body, Rect2(0, -note_h / 2.0, w, note_h))
+			if w >= note_h * 0.9 and note_h >= 10.0:
+				# a soft highlight along the top edge
+				var inset := note_h * 0.22
+				_sheen.bg_color = Color(1, 1, 1, 0.17 * intro)
+				_sheen.set_corner_radius_all(int(note_h * 0.12))
+				draw_style_box(_sheen, Rect2(inset, -note_h / 2.0 + note_h * 0.12, w - inset * 2.0, note_h * 0.24))
 			draw_set_transform(Vector2.ZERO)
-			# its "note on" image, at the playhead
+			# its pulse, at the playhead
 			if on >= 0.0 and on < max(dur - 0.025, 0.065) + 0.17:
 				effects.append([tl, n, y + dip, on, dur])
-			if top > HEIGHT + 64:
-				pass
 	_draw_effects(effects)
 
 func _draw_effects(effects: Array) -> void:
@@ -160,9 +162,6 @@ func _draw_effects(effects: Array) -> void:
 		var y: float = e[2]
 		var on: float = e[3]
 		var dur: float = e[4]
-		var tex := texture(tl.effect_texture)
-		if tex == null:
-			tex = load(Look.DEFAULT_EFFECT)
 		var hold: float = max(dur - 0.025, 0.065)
 		var s := 1.0
 		var a := 1.0
@@ -176,10 +175,19 @@ func _draw_effects(effects: Array) -> void:
 			a = 1.0 - clampf((end - 0.0833) / (0.1458 - 0.0833), 0.0, 1.0)
 		if look.velocity_strength > 0.01:
 			s *= 0.55 + n.velocity / 127.0 * 0.5
-		var col: Color = Color.WHITE if tl.plain else tl.color
-		col = Color(col.r + 0.1, col.g + 0.1, col.b + 0.1, a)
-		var size := tex.get_size() * s
-		draw_texture_rect(tex, Rect2(Vector2(PLAYHEAD, y) - size / 2.0, size), false, col)
+		var col: Color = tl.color
+		var center := Vector2(PLAYHEAD, y)
+		var r: float = note_height() * 0.95 * s
+		if r < 0.5:
+			continue
+		var g := look.glow
+		# a soft halo, a ring, a bright core
+		var radii := [2.3, 1.7, 1.25]
+		var fades := [0.07, 0.11, 0.17]
+		for k in 3:
+			draw_circle(center, r * radii[k], Color(col.r, col.g, col.b, fades[k] * g * a))
+		draw_arc(center, r, 0.0, TAU, 48, Color(col.r + 0.1, col.g + 0.1, col.b + 0.1, a), maxf(2.0, r * 0.14), true)
+		draw_circle(center, r * 0.45, Color(minf(col.r + 0.35, 1.0), minf(col.g + 0.35, 1.0), minf(col.b + 0.35, 1.0), a * 0.95))
 
 func _draw_background() -> void:
 	if _background_path != look.background:

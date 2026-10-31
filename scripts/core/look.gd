@@ -5,43 +5,34 @@
 class_name Look
 extends RefCounted
 
-const DEFAULT_NOTE := "res://assets/sprites/note_texture.png"
-const DEFAULT_EFFECT := "res://assets/sprites/note_effect_texture.png"
-const DEFAULT_STACCATO := "res://assets/sprites/note_staccato_image.png"
+## How a note is shaped (all drawn, never from pictures).
+enum Shape { PILL, SOFT, SHARP }
 
 class TrackLook:
 	var color := Color.WHITE
 	## How fast this track's notes move, relative to the scene speed
 	## (tracks farther in front move faster: the depth effect).
 	var parallax := 1.0
-	var note_texture := DEFAULT_NOTE
-	var effect_texture := DEFAULT_EFFECT
-	## Nine-patch margins of the note texture (left, right), px.
-	var margins := Vector2(12, 12)
+	var shape := Shape.PILL
+	## An icon name from [Icons], or "" to pick one from the track itself.
+	var icon := ""
+	## Short dots instead of long notes.
 	var staccato := false
-	## Drawn in the textures' own colors.
-	var plain := false
 	var visible := true
 
 	func to_dict() -> Dictionary:
 		return {
-			"color": color.to_html(), "parallax": parallax,
-			"note_texture": note_texture, "effect_texture": effect_texture,
-			"margins": [margins.x, margins.y], "staccato": staccato,
-			"plain": plain, "visible": visible,
+			"color": color.to_html(), "parallax": parallax, "shape": shape,
+			"icon": icon, "staccato": staccato, "visible": visible,
 		}
 
 	static func from_dict(d: Dictionary, fallback: TrackLook) -> TrackLook:
 		var t := TrackLook.new()
 		t.color = Color.from_string(str(d.get("color", "")), fallback.color)
 		t.parallax = float(d.get("parallax", fallback.parallax))
-		t.note_texture = str(d.get("note_texture", fallback.note_texture))
-		t.effect_texture = str(d.get("effect_texture", fallback.effect_texture))
-		var m = d.get("margins", [fallback.margins.x, fallback.margins.y])
-		if m is Array and m.size() == 2:
-			t.margins = Vector2(float(m[0]), float(m[1]))
+		t.shape = clampi(int(d.get("shape", fallback.shape)), 0, 2)
+		t.icon = str(d.get("icon", ""))
 		t.staccato = bool(d.get("staccato", false))
-		t.plain = bool(d.get("plain", false))
 		t.visible = bool(d.get("visible", true))
 		return t
 
@@ -53,6 +44,10 @@ var vertical_offset := -192.0
 var top_margin := 880.0
 var velocity_strength := 0.2
 var pitch_bend_strength := 0.5
+## How much notes glow while they play, and how thick they are (× the
+## default, which follows the note spacing).
+var glow := 0.6
+var thickness := 1.0
 ## Seconds the notes are shifted against the audio (+: notes later).
 var audio_offset := 0.0
 var square := false
@@ -81,9 +76,10 @@ func to_dict() -> Dictionary:
 	for k in tracks:
 		tr[k] = tracks[k].to_dict()
 	return {
-		"version": 2, "speed": speed, "vertical_offset": vertical_offset,
+		"version": 3, "speed": speed, "vertical_offset": vertical_offset,
 		"top_margin": top_margin, "velocity_strength": velocity_strength,
 		"pitch_bend_strength": pitch_bend_strength, "audio_offset": audio_offset,
+			"glow": glow, "thickness": thickness,
 		"square": square, "background": background, "tracks": tr,
 	}
 
@@ -95,6 +91,8 @@ static func from_dict(d: Dictionary) -> Look:
 	l.velocity_strength = float(d.get("velocity_strength", l.velocity_strength))
 	l.pitch_bend_strength = float(d.get("pitch_bend_strength", l.pitch_bend_strength))
 	l.audio_offset = float(d.get("audio_offset", l.audio_offset))
+	l.glow = float(d.get("glow", l.glow))
+	l.thickness = float(d.get("thickness", l.thickness))
 	l.square = bool(d.get("square", false))
 	l.background = str(d.get("background", ""))
 	var tr = d.get("tracks", {})

@@ -23,8 +23,12 @@ const SNAPS := [["Off", 0.0], ["1 beat", 1.0], ["1/2", 0.5], ["1/4", 0.25], ["1/
 func setup(the_app) -> void:
 	app = the_app
 	add_theme_constant_override("separation", 6)
-	var bar := HBoxContainer.new()
-	bar.add_theme_constant_override("separation", 6)
+	size_flags_horizontal = SIZE_EXPAND_FILL
+	clip_contents = true
+	custom_minimum_size.x = 0
+	var bar := HFlowContainer.new()
+	bar.add_theme_constant_override("h_separation", 6)
+	bar.add_theme_constant_override("v_separation", 6)
 	add_child(bar)
 	_track_pick = OptionButton.new()
 	_track_pick.custom_minimum_size.x = 170
@@ -50,7 +54,7 @@ func setup(the_app) -> void:
 	_vel.value_changed.connect(func(v): canvas.set_velocity(int(v)))
 	bar.add_child(_vel)
 	_info = Label.new()
-	_info.size_flags_horizontal = SIZE_EXPAND_FILL
+	_info.custom_minimum_size.x = 90
 	_info.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_info.add_theme_color_override("font_color", Color(1, 1, 1, 0.55))
 	bar.add_child(_info)
@@ -69,6 +73,7 @@ func setup(the_app) -> void:
 	hint.add_theme_font_size_override("font_size", 12)
 	hint.add_theme_color_override("font_color", Color(1, 1, 1, 0.45))
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint.custom_minimum_size.x = 1 # wraps to the room there is, never widens the window
 	add_child(hint)
 
 func _button(bar: Control, text: String, tip: String, on: Callable) -> Button:

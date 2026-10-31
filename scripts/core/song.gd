@@ -29,6 +29,8 @@ class Track:
 	## A part split off by pitch: its label (e.g. "Snare") and its pitch.
 	var lane := ""
 	var lane_pitch := -1
+	## The name it was given by the file or the split (before any renaming).
+	var auto_name := ""
 
 var path := ""
 ## Beats per minute at the start (for snapping in the editor; the timing
@@ -301,6 +303,7 @@ func split_by_pitch(track: Track, as_drums: bool) -> int:
 		t.drums = track.drums
 		t.lane_pitch = p
 		t.lane = drum_name(p) if as_drums else note_name(p)
+		t.auto_name = "%s · %s" % [track.origin, t.lane]
 		t.name = "%s · %s" % [track.name, t.lane]
 		t.notes.assign(by_pitch[p])
 		parts.append(t)
@@ -329,6 +332,7 @@ func merge_lanes(origin: String) -> Track:
 		return null
 	var whole := Track.new()
 	whole.name = origin
+	whole.auto_name = origin
 	whole.origin = origin
 	whole.source = first.source
 	whole.program = first.program
@@ -364,6 +368,7 @@ func add_empty_track(name := "") -> Track:
 			n += 1
 		name = "Track %d" % n
 	t.name = name
+	t.auto_name = name
 	t.origin = name
 	tracks.append(t)
 	return t

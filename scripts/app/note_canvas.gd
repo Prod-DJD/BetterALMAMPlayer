@@ -50,7 +50,7 @@ var _hover := ""
 func _init() -> void:
 	focus_mode = Control.FOCUS_CLICK
 	clip_contents = true
-	custom_minimum_size = Vector2(400, 240)
+	custom_minimum_size = Vector2(120, 200)
 
 func _process(_d: float) -> void:
 	if is_visible_in_tree() and app and app.playing:

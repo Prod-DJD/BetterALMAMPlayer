@@ -11,6 +11,8 @@ var tl: Look.TrackLook
 var index := 0
 var _icon: IconView
 var _picker: PopupPanel
+var _sb: StyleBoxFlat
+var _name_label: Label
 
 func setup(the_app, t: Song.Track, look: Look.TrackLook, i := 0) -> void:
 	app = the_app
@@ -18,12 +20,14 @@ func setup(the_app, t: Song.Track, look: Look.TrackLook, i := 0) -> void:
 	tl = look
 	index = i
 	var sb := StyleBoxFlat.new()
+	_sb = sb
 	sb.bg_color = Color("332e29")
 	sb.set_corner_radius_all(8)
 	sb.content_margin_left = 8
 	sb.content_margin_right = 8
 	sb.content_margin_top = 6
 	sb.content_margin_bottom = 6
+	sb.border_color = Color("f7b955")
 	add_theme_stylebox_override("panel", sb)
 	var v := VBoxContainer.new()
 	add_child(v)
@@ -54,11 +58,13 @@ func setup(the_app, t: Song.Track, look: Look.TrackLook, i := 0) -> void:
 	name.size_flags_horizontal = SIZE_EXPAND_FILL
 	name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	name.clip_text = true
+	name.tooltip_text += "\nDouble-click to rename"
+	_name_label = name
 	row.add_child(name)
 	var more := MenuButton.new()
 	more.text = "⋯"
 	more.flat = false
-	more.tooltip_text = "Split drums into parts, add or remove tracks"
+	more.tooltip_text = "Rename, split drums into parts, remove"
 	more.about_to_popup.connect(func(): _fill_menu(more.get_popup()))
 	more.get_popup().id_pressed.connect(_menu_chosen)
 	row.add_child(more)
@@ -94,20 +100,67 @@ func setup(the_app, t: Song.Track, look: Look.TrackLook, i := 0) -> void:
 	stacc.toggled.connect(func(on): tl.staccato = on; app._changed())
 	row2.add_child(stacc)
 
-## Hold a track and drag it up or down the list to move it.
-func _get_drag_data(_at: Vector2) -> Variant:
-	var preview := PanelContainer.new()
-	var name_label := Label.new()
-	name_label.text = "  " + track.name + "  "
-	preview.add_child(name_label)
-	set_drag_preview(preview)
+func _gui_input(e: InputEvent) -> void:
+	if e is InputEventMouseButton and e.pressed and e.double_click and e.button_index == MOUSE_BUTTON_LEFT \
+			and _name_label.get_global_rect().has_point(get_global_mouse_position()):
+		app.ask_rename(index)
+
+## Hold a track and drag it up or down the list: the whole row comes along.
+func _get_drag_data(at: Vector2) -> Variant:
+	set_drag_preview(_row_picture(at))
 	return {"track_row": index}
 
-func _can_drop_data(_at: Vector2, data: Variant) -> bool:
-	return data is Dictionary and data.has("track_row") and data["track_row"] != index
+## A picture of this row as it looks now, held at the spot it was grabbed.
+func _row_picture(at: Vector2) -> Control:
+	var holder := Control.new()
+	var shown: Control = null
+	var img := get_viewport().get_texture().get_image()
+	if img != null and not img.is_empty():
+		var ratio := float(img.get_width()) / get_viewport().get_visible_rect().size.x
+		var r := Rect2i(Vector2i(get_global_rect().position * ratio), Vector2i(size * ratio))
+		r = r.intersection(Rect2i(Vector2i.ZERO, img.get_size()))
+		if r.size.x > 0 and r.size.y > 0:
+			var pic := TextureRect.new()
+			pic.texture = ImageTexture.create_from_image(img.get_region(r))
+			pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			pic.stretch_mode = TextureRect.STRETCH_SCALE
+			pic.size = size
+			pic.modulate = Color(1, 1, 1, 0.92)
+			shown = pic
+	if shown == null: # no picture to take (nothing drawn yet): the name will do
+		var panel := PanelContainer.new()
+		var l := Label.new()
+		l.text = "  " + track.name + "  "
+		panel.add_child(l)
+		shown = panel
+	shown.position = -at
+	holder.add_child(shown)
+	return holder
 
-func _drop_data(_at: Vector2, data: Variant) -> void:
-	app.move_track_to(data["track_row"], index)
+func _can_drop_data(at: Vector2, data: Variant) -> bool:
+	var ok: bool = data is Dictionary and data.has("track_row") and data["track_row"] != index
+	if ok:
+		app.show_drop_hint(self, -1 if at.y < size.y / 2.0 else 1)
+	return ok
+
+func _drop_data(at: Vector2, data: Variant) -> void:
+	var from: int = data["track_row"]
+	# the line shows where it lands: above this row or below it
+	var to := index + (0 if at.y < size.y / 2.0 else 1)
+	if from < to:
+		to -= 1
+	app.clear_drop_hint()
+	app.move_track_to(from, to)
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_DRAG_END:
+		app.clear_drop_hint()
+
+## A line above (-1) or below (+1) this row, or none (0).
+func set_drop_hint(side: int) -> void:
+	_sb.border_width_top = 3 if side < 0 else 0
+	_sb.border_width_bottom = 3 if side > 0 else 0
+	queue_redraw()
 
 func _current_icon() -> String:
 	if tl.icon != "":
@@ -130,6 +183,7 @@ func _fill_menu(menu: PopupMenu) -> void:
 	else:
 		menu.add_item("Merge the parts back into one track", 2)
 	menu.add_separator()
+	menu.add_item("Rename…", 4)
 	menu.add_item("Remove this track", 3)
 
 func _menu_chosen(id: int) -> void:
@@ -142,6 +196,8 @@ func _menu_chosen(id: int) -> void:
 			app.merge_track(index)
 		3:
 			app.remove_track(index)
+		4:
+			app.ask_rename(index)
 
 func _open_picker() -> void:
 	if _picker:

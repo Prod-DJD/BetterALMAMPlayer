@@ -119,10 +119,10 @@ func _build() -> void:
 	cols.add_child(left)
 	var all_row := HFlowContainer.new()
 	left.get_child(0).add_child(all_row)
-	all_row.add_child(_button("Rainbow", _rainbow, "Colors around the color wheel"))
-	all_row.add_child(_button("Gradient", _gradient, "Colors from the first track's to the last's"))
-	all_row.add_child(_button("Depth", _reset_depth, "Back to the default speeds (the top tracks faster)"))
-	all_row.add_child(_button("Icons", _auto_icons, "Pick every track's icon from its name and instrument again"))
+	all_row.add_child(_toggle_button("rainbow", "Rainbow", "Colors around the color wheel", func(on): _color_toggle("rainbow", on)))
+	all_row.add_child(_toggle_button("gradient", "Gradient", "Colors from the first track's to the last's", func(on): _color_toggle("gradient", on)))
+	all_row.add_child(_toggle_button("depth", "Depth", "Default speeds (the top tracks faster)", _depth_toggle))
+	all_row.add_child(_toggle_button("icons", "Icons", "Every icon picked again from the track's name and instrument", _icons_toggle))
 	all_row.add_child(_button("＋ Track", add_track, "Add an empty track (add its notes in the editor)"))
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = SIZE_EXPAND_FILL
@@ -160,6 +160,10 @@ func _build() -> void:
 	top.add_child(_edit_btn)
 	_status = Label.new()
 	_status.add_theme_color_override("font_color", TEXT_DIM)
+	_status.custom_minimum_size.x = 150 # a long message trims; it never widens the window
+	_status.clip_text = true
+	_status.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	top.add_child(_status)
 
 	var frame := AspectRatioContainer.new()
@@ -301,8 +305,15 @@ func open_song(path: String) -> void:
 			if t.drums and Song.distinct_pitches(t) > 1:
 				project.splits[t.origin] = "drums"
 	song.apply_splits(project.splits)
+	for t in song.tracks:
+		if t.auto_name == "":
+			t.auto_name = t.name
+		if project.renames.has(t.auto_name) and str(project.renames[t.auto_name]) != "":
+			t.name = str(project.renames[t.auto_name])
+	Importer.unique_names(song)
 	song.reorder(project.look.order)
 	_default_part_looks()
+	_reset_toggles()
 	Project.remember(path)
 	_apply_project()
 
@@ -476,6 +487,7 @@ func _save_now() -> void:
 
 func _flash(text: String) -> void:
 	_status.text = text
+	_status.tooltip_text = text
 
 # ---------------------------------------------------------------- files
 
@@ -589,6 +601,9 @@ func _default_part_looks() -> void:
 			speed[t.origin] = tl.parallax
 		elif fresh:
 			tl.parallax = speed[t.origin]
+		# drum parts are hits, not held notes: dots (staccato) from the start
+		if fresh and str(project.splits.get(t.origin, "")) == "drums":
+			tl.staccato = true
 
 ## Splits track [i] into one track per pitch it uses: drum parts by name
 ## (kick, snare, hats…) or just by note.
@@ -600,6 +615,11 @@ func split_track(i: int, as_drums: bool) -> void:
 	if made == 0:
 		_flash("That track only has one note.")
 		return
+	# parts of a renamed track keep its new name as their start; remember it
+	# so they come back the same when the song is opened again
+	for p in song.tracks:
+		if p.origin == t.origin and p.lane != "" and p.name != p.auto_name:
+			project.renames[p.auto_name] = p.name
 	project.splits[t.origin] = "drums" if as_drums else "notes"
 	_tracks_changed()
 	_flash("Split into %d tracks" % made)
@@ -612,6 +632,9 @@ func merge_track(i: int) -> void:
 	if song.merge_lanes(origin) == null:
 		return
 	project.splits.erase(origin)
+	for t in song.tracks:
+		if t.origin == origin and project.renames.has(origin):
+			t.name = str(project.renames[origin])
 	_tracks_changed()
 	_flash("Merged back into one track")
 
@@ -658,22 +681,157 @@ func _each_track(f: Callable) -> void:
 	_rebuild_tracks()
 	_changed(true)
 
-func _rainbow() -> void:
-	_each_track(func(tl, i, n): tl.color = Look.default_track(i, n).color)
+## The four buttons above the tracks switch on and off: press one and the
+## change is made, press it again and your own colors, speeds or icons come
+## straight back.
+var _snap_colors := {} # track name → color, before Rainbow / Gradient
+var _color_mode := ""
+var _snap_depth := {}
+var _snap_icons := {}
+var _toggles := {} # "rainbow" … → its button
 
-func _gradient() -> void:
-	var n := song.tracks.size()
-	if n < 2:
+func _toggle_button(id: String, text: String, tip: String, on: Callable) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.toggle_mode = true
+	b.tooltip_text = tip + " (press again to undo)"
+	b.toggled.connect(on)
+	_toggles[id] = b
+	return b
+
+func _reset_toggles() -> void:
+	_snap_colors = {}
+	_snap_depth = {}
+	_snap_icons = {}
+	_color_mode = ""
+	for b in _toggles.values():
+		b.set_pressed_no_signal(false)
+
+func _color_toggle(mode: String, pressed: bool) -> void:
+	if song == null:
+		_toggles[mode].set_pressed_no_signal(false)
 		return
-	var a: Color = project.look.track_look(song.tracks[0].name, 0, n).color
-	var b: Color = project.look.track_look(song.tracks[n - 1].name, n - 1, n).color
-	_each_track(func(tl, i, cnt): tl.color = a.lerp(b, float(i) / (cnt - 1)))
+	if not pressed:
+		if _color_mode == mode:
+			for i in song.tracks.size():
+				var t: Song.Track = song.tracks[i]
+				if _snap_colors.has(t.name):
+					project.look.track_look(t.name, i, song.tracks.size()).color = _snap_colors[t.name]
+			_color_mode = ""
+			_rebuild_tracks()
+			_changed(true)
+		return
+	if _color_mode == "":
+		_snap_colors = {}
+		for i in song.tracks.size():
+			var t: Song.Track = song.tracks[i]
+			_snap_colors[t.name] = project.look.track_look(t.name, i, song.tracks.size()).color
+	_color_mode = mode
+	for other in ["rainbow", "gradient"]:
+		if other != mode:
+			_toggles[other].set_pressed_no_signal(false)
+	var n := song.tracks.size()
+	if mode == "rainbow":
+		_each_track(func(tl, i, cnt): tl.color = Look.default_track(i, cnt).color)
+	elif n >= 2:
+		var a: Color = _snap_colors[song.tracks[0].name]
+		var b: Color = _snap_colors[song.tracks[n - 1].name]
+		_each_track(func(tl, i, cnt): tl.color = a.lerp(b, float(i) / (cnt - 1)))
 
-func _reset_depth() -> void:
-	_each_track(func(tl, i, n): tl.parallax = Look.default_track(i, n).parallax)
+func _depth_toggle(pressed: bool) -> void:
+	if song == null:
+		_toggles["depth"].set_pressed_no_signal(false)
+		return
+	var n := song.tracks.size()
+	if pressed:
+		_snap_depth = {}
+		for i in n:
+			var t: Song.Track = song.tracks[i]
+			_snap_depth[t.name] = project.look.track_look(t.name, i, n).parallax
+		_each_track(func(tl, i, cnt): tl.parallax = Look.default_track(i, cnt).parallax)
+	else:
+		for i in n:
+			var t: Song.Track = song.tracks[i]
+			if _snap_depth.has(t.name):
+				project.look.track_look(t.name, i, n).parallax = _snap_depth[t.name]
+		_rebuild_tracks()
+		_changed(true)
 
-func _auto_icons() -> void:
-	_each_track(func(tl, _i, _n): tl.icon = "")
+func _icons_toggle(pressed: bool) -> void:
+	if song == null:
+		_toggles["icons"].set_pressed_no_signal(false)
+		return
+	var n := song.tracks.size()
+	if pressed:
+		_snap_icons = {}
+		for i in n:
+			var t: Song.Track = song.tracks[i]
+			_snap_icons[t.name] = project.look.track_look(t.name, i, n).icon
+		_each_track(func(tl, _i, _n): tl.icon = "")
+	else:
+		for i in n:
+			var t: Song.Track = song.tracks[i]
+			if _snap_icons.has(t.name):
+				project.look.track_look(t.name, i, n).icon = _snap_icons[t.name]
+		_rebuild_tracks()
+		_changed(true)
+
+## Renames track [i]. Edits, looks and the order follow the new name.
+func rename_track(i: int, new_name: String) -> void:
+	if song == null or i < 0 or i >= song.tracks.size():
+		return
+	var t: Song.Track = song.tracks[i]
+	new_name = new_name.strip_edges()
+	if new_name == "" or new_name == t.name:
+		return
+	for o in song.tracks:
+		if o != t and o.name == new_name:
+			_flash("Another track already has that name.")
+			return
+	var old := t.name
+	if project.look.tracks.has(old):
+		project.look.tracks[new_name] = project.look.tracks[old]
+		project.look.tracks.erase(old)
+	if t.auto_name == "":
+		t.auto_name = old
+	t.name = new_name
+	if new_name == t.auto_name:
+		project.renames.erase(t.auto_name)
+	else:
+		project.renames[t.auto_name] = new_name
+	_tracks_changed()
+
+## Asks for a new name for track [i].
+func ask_rename(i: int) -> void:
+	if song == null or i < 0 or i >= song.tracks.size():
+		return
+	var d := ConfirmationDialog.new()
+	d.title = "Rename track"
+	var e := LineEdit.new()
+	e.text = song.tracks[i].name
+	e.select_all_on_focus = true
+	e.custom_minimum_size.x = 280
+	d.add_child(e)
+	d.register_text_enter(e)
+	d.confirmed.connect(func(): rename_track(i, e.text); d.queue_free())
+	d.canceled.connect(func(): d.queue_free())
+	add_child(d)
+	d.popup_centered()
+	e.grab_focus()
+
+## Which row shows the "it will land here" line while a track is dragged.
+var _hint_row: TrackRow
+
+func show_drop_hint(row: TrackRow, side: int) -> void:
+	if _hint_row and _hint_row != row:
+		_hint_row.set_drop_hint(0)
+	_hint_row = row
+	row.set_drop_hint(side)
+
+func clear_drop_hint() -> void:
+	if _hint_row:
+		_hint_row.set_drop_hint(0)
+		_hint_row = null
 
 # ---------------------------------------------------------------- scene
 

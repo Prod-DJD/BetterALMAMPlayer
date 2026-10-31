@@ -80,6 +80,13 @@ in the file), so they follow the parts. Icons: ~100, authored in
 assets/branding/make_icons.py (writes scripts/core/icon_data.gd + preview
 sheets), picked from the track/part name or GM program, searchable picker.
 
+Later the same day: drum parts start as dots; tracks rename (⋯ menu or double-click
+the name; kept in project.renames by the name a track started with); Rainbow /
+Gradient / Depth / Icons are toggles that restore the person's own values;
+dragging a track shows the whole row and a line where it will land; the note
+editor's toolbar wraps and the status label trims, so Edit notes never widens
+the window past the right-hand panel.
+
 Still open: per-track note edge margins are gone with the images (not
 needed); FLAC audio; a full-screen preview window; Reaper / MusicXML
 import; add new requests here.

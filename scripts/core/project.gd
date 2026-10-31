@@ -17,6 +17,8 @@ var edits := {}
 var splits := {}
 ## Empty tracks the person made (their notes are in [member edits]).
 var extra_tracks: Array = []
+## Names the person gave tracks: the name it started with → their name.
+var renames := {}
 ## Opened for the first time (no saved project yet).
 var fresh := false
 
@@ -38,6 +40,8 @@ static func open_for(midi_path: String) -> Project:
 				p.edits = d["edits"]
 			if d.get("splits") is Dictionary:
 				p.splits = d["splits"]
+			if d.get("renames") is Dictionary:
+				p.renames = d["renames"]
 			if d.get("extra_tracks") is Array:
 				p.extra_tracks = d["extra_tracks"]
 			if d.get("look") is Dictionary:
@@ -60,7 +64,7 @@ func save() -> void:
 	DirAccess.make_dir_recursive_absolute(DIR)
 	var f := FileAccess.open(_key(midi), FileAccess.WRITE)
 	if f:
-		f.store_string(JSON.stringify({"midi": midi, "audio": audio, "edits": edits, "splits": splits, "extra_tracks": extra_tracks, "look": look.to_dict()}, "\t"))
+		f.store_string(JSON.stringify({"midi": midi, "audio": audio, "edits": edits, "splits": splits, "extra_tracks": extra_tracks, "renames": renames, "look": look.to_dict()}, "\t"))
 
 # ----- the app's own memory: last song, recent songs -----
 

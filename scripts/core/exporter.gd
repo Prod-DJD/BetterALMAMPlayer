@@ -19,15 +19,22 @@ const TAIL := 2.0
 var _cancel := false
 var running := false
 
-## Where ffmpeg is: inside the app, else this folder's tools, else Homebrew.
+## Where ffmpeg is: inside the app, else this folder's tools, else the
+## system's (Homebrew, Program Files, or anywhere on PATH).
 static func ffmpeg_path() -> String:
 	var exe_dir := OS.get_executable_path().get_base_dir()
 	var arch := "arm64" if Engine.get_architecture_name() == "arm64" else "x86_64"
-	for p in [
-		exe_dir + "/ffmpeg",
+	var name := "ffmpeg.exe" if OS.get_name() == "Windows" else "ffmpeg"
+	var candidates := [
+		exe_dir.path_join(name),
 		ProjectSettings.globalize_path("res://.tools/ffmpeg/%s/ffmpeg" % arch),
 		"/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg",
-	]:
+		"C:/ffmpeg/bin/ffmpeg.exe", "C:/Program Files/ffmpeg/bin/ffmpeg.exe",
+	]
+	var sep := ";" if OS.get_name() == "Windows" else ":"
+	for dir in OS.get_environment("PATH").split(sep, false):
+		candidates.append(dir.path_join(name))
+	for p in candidates:
 		if FileAccess.file_exists(p):
 			return p
 	return ""

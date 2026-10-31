@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.0
+
+The first full release. Everything in 0.1.0, plus:
+
+- Open Logic Pro projects (`.logicx`): every MIDI track in the arrange, in its order, with its notes. Ported from the MIT-licensed LogicBridge (see `licenses/LogicBridge-MIT.txt`), and checked against its own inspection tool.
+- Builds for macOS (universal), Windows (64-bit), Linux (64-bit) and iOS (an unsigned IPA, for jailbroken devices).
+- Video export finds ffmpeg on the system PATH on Windows and Linux (install it, e.g. `winget install ffmpeg`). The macOS build includes it.
+- Track icons show on every note hit, and note-off velocity is used by the velocity effect.
+
 ## 0.1.0: first release
 
 Rebuilt from almam's ALMAMPlayer.

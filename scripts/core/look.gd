@@ -11,7 +11,7 @@ enum Shape { PILL, SOFT, SHARP }
 class TrackLook:
 	var color := Color.WHITE
 	## How fast this track's notes move, relative to the scene speed
-	## (tracks farther in front move faster: the depth effect).
+	## (the depth effect). Who is in front is the track list's order.
 	var parallax := 1.0
 	var shape := Shape.PILL
 	## An icon name from [Icons], or "" to pick one from the track itself.
@@ -58,7 +58,7 @@ var tracks := {}
 var order: Array = []
 
 ## The look for [track] number [i] of [count]: saved, or a default
-## (colors around the wheel, nearer tracks faster).
+## (colors around the wheel, the top tracks faster).
 func track_look(name: String, i: int, count: int) -> TrackLook:
 	if tracks.has(name):
 		return tracks[name]

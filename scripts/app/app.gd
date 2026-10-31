@@ -121,7 +121,7 @@ func _build() -> void:
 	left.get_child(0).add_child(all_row)
 	all_row.add_child(_button("Rainbow", _rainbow, "Colors around the color wheel"))
 	all_row.add_child(_button("Gradient", _gradient, "Colors from the first track's to the last's"))
-	all_row.add_child(_button("Depth", _reset_depth, "Back to the default depth (nearer tracks faster)"))
+	all_row.add_child(_button("Depth", _reset_depth, "Back to the default speeds (the top tracks faster)"))
 	all_row.add_child(_button("Icons", _auto_icons, "Pick every track's icon from its name and instrument again"))
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = SIZE_EXPAND_FILL

@@ -1,6 +1,7 @@
 ## One track in the list: shown or hidden, its icon (picked from its name
-## and instrument, or chosen), its color, its name, how far in front it sits
-## (depth), the note shape, and staccato. Changes show at once.
+## and instrument, or chosen), its color, its name, how fast it moves (depth),
+## the note shape, and staccato. Its place in the list sets whether it is in
+## front of the tracks below it. Changes show at once.
 class_name TrackRow
 extends PanelContainer
 
@@ -81,7 +82,7 @@ func setup(the_app, t: Song.Track, look: Look.TrackLook, i := 0) -> void:
 	depth.step = 0.02
 	depth.value = tl.parallax
 	depth.suffix = "× depth"
-	depth.tooltip_text = "How fast this track moves (more: nearer, drawn in front)"
+	depth.tooltip_text = "How fast this track moves. Who is in front follows the list: the top track is in front"
 	depth.value_changed.connect(func(x): tl.parallax = x; app._changed())
 	row2.add_child(depth)
 	var shape := OptionButton.new()

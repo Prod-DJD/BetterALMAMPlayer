@@ -7,8 +7,9 @@
 ## past the middle of a 1920×1080 frame; a note lights up, glows, dips and
 ## swells a little as it plays (more with velocity), a drawn pulse pops at
 ## the playhead, pitch bends shift the playing notes, and tracks with more
-## parallax move faster and sit in front. Everything is drawn from shapes,
-## never from pictures, so it is sharp at any size.
+## parallax move faster, and the track list sets who is in front (the top
+## track). Everything is drawn from shapes, never from pictures, so it is
+## sharp at any size.
 class_name Visualizer
 extends Node2D
 
@@ -81,12 +82,12 @@ func _draw() -> void:
 	if song == null:
 		return
 	var count := song.tracks.size()
-	# farther tracks (less parallax) first, nearer ones on top
+	# the list's last track is drawn first (behind), its first track last
+	# (in front), whatever their speeds
 	var order: Array = []
-	for i in count:
+	for i in range(count - 1, -1, -1):
 		var tr: Song.Track = song.tracks[i]
 		order.append([look.track_look(tr.name, i, count), tr])
-	order.sort_custom(func(a, b): return a[0].parallax < b[0].parallax)
 	var base_y := HEIGHT + look.vertical_offset
 	var gap := spacing()
 	var note_h := note_height()

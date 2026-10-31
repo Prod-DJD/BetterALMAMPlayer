@@ -66,6 +66,11 @@ Tests (not in git, in .tools/): `.tools/godot.sh --headless --path . -s
 (the whole app, editing, reopening). Screenshots can't be taken from the
 Claude sandbox (it blocks windows); run `.tools/shot_main.gd` yourself.
 
+Brand (2026-10-31): the app icon, launch screen and a Windows .ico are drawn
+by assets/branding/make_brand.py (notes scrolling past a playhead, one lit
+with the app's pulse); rerun it to change them. Track order = layering: the
+top track in the list is in front, whatever its speed.
+
 Still open: per-track note edge margins are gone with the images (not
 needed); FLAC audio; a full-screen preview window; Reaper / MusicXML
 import; add new requests here.

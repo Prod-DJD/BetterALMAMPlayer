@@ -13,3 +13,7 @@ build/
 
 # files uploaded in chat (may hold secrets): never commit
 inbox/
+
+# secret files: never commit
+Untitled.txt
+*token*.txt

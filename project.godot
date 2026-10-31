@@ -15,8 +15,8 @@ run/main_scene="res://scenes/app.tscn"
 config/use_custom_user_dir=true
 config/custom_user_dir_name="ALMAMPlayer"
 config/features=PackedStringArray("4.1")
-boot_splash/bg_color=Color(0.886275, 0.862745, 0.607843, 1)
-boot_splash/image="res://assets/sprites/splash.png"
+boot_splash/bg_color=Color(0.113725, 0.101961, 0.090196, 1)
+boot_splash/image=""
 config/icon="res://icon.png"
 boot_splash/minimum_display_time=100
 

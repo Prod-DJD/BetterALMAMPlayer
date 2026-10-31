@@ -56,6 +56,10 @@ var square := false
 ## its frame rate.
 var export_height := 1080
 var export_fps := 60
+## The codec for a transparent video: "prores" (.mov, the best for editing,
+## the biggest), "hevc" (.mov, much smaller, Apple apps), or "vp9" (.webm,
+## the smallest; browsers and some editors).
+var alpha_codec := "prores"
 var background := ""
 ## Track name → TrackLook
 var tracks := {}
@@ -87,7 +91,7 @@ func to_dict() -> Dictionary:
 		"top_margin": top_margin, "velocity_strength": velocity_strength,
 		"pitch_bend_strength": pitch_bend_strength, "audio_offset": audio_offset,
 			"glow": glow, "thickness": thickness,
-		"square": square, "export_height": export_height, "export_fps": export_fps, "background": background, "tracks": tr, "order": order,
+		"square": square, "export_height": export_height, "export_fps": export_fps, "alpha_codec": alpha_codec, "background": background, "tracks": tr, "order": order,
 	}
 
 static func from_dict(d: Dictionary) -> Look:
@@ -103,6 +107,7 @@ static func from_dict(d: Dictionary) -> Look:
 	l.square = bool(d.get("square", false))
 	l.export_height = int(d.get("export_height", 1080)) if int(d.get("export_height", 1080)) in [1080, 1440, 2160] else 1080
 	l.export_fps = int(d.get("export_fps", 60)) if int(d.get("export_fps", 60)) in [24, 30, 60, 120] else 60
+	l.alpha_codec = str(d.get("alpha_codec", "prores")) if str(d.get("alpha_codec", "prores")) in ["prores", "hevc", "vp9"] else "prores"
 	l.background = str(d.get("background", ""))
 	var o = d.get("order", [])
 	if o is Array:

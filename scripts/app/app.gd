@@ -877,6 +877,14 @@ func _rebuild_scene() -> void:
 	res.tooltip_text = "Video size. 4K takes much longer and makes big files."
 	res.item_selected.connect(func(i): l.export_height = res.get_item_id(i); _changed())
 	qrow.add_child(res)
+	var alpha := OptionButton.new()
+	alpha.add_item("Transparent: ProRes 4444 (.mov, best for editing)", 0)
+	alpha.add_item("Transparent: HEVC (.mov, smaller; Apple, untested)", 1)
+	alpha.add_item("Transparent: VP9 (.webm, smallest)", 2)
+	alpha.select(["prores", "hevc", "vp9"].find(l.alpha_codec))
+	alpha.tooltip_text = "The codec used when you export with a transparent background (.mov or .webm)"
+	alpha.item_selected.connect(func(i): l.alpha_codec = ["prores", "hevc", "vp9"][i]; _changed())
+	qrow.add_child(alpha)
 	var fps := OptionButton.new()
 	for f in [24, 30, 60, 120]:
 		fps.add_item("%d fps" % f, f)
@@ -1044,11 +1052,12 @@ func _export_dialog() -> void:
 	d.use_native_dialog = true
 	d.file_mode = FileDialog.FILE_MODE_SAVE_FILE
 	d.access = FileDialog.ACCESS_FILESYSTEM
-	d.filters = PackedStringArray(["*.mov ; QuickTime, transparent background (ProRes 4444 with alpha)", "*.mp4 ; MP4 video, black background"])
+	d.filters = PackedStringArray(["*.mov ; QuickTime, transparent background", "*.webm ; WebM, transparent background (smallest)", "*.mp4 ; MP4 video, black background"])
 	d.current_file = _title.text + ".mov"
 	d.current_dir = project.midi.get_base_dir()
 	d.file_selected.connect(func(p):
-		if not (p.to_lower().ends_with(".mov") or p.to_lower().ends_with(".mp4")):
+		var low: String = p.to_lower()
+		if not (low.ends_with(".mov") or low.ends_with(".mp4") or low.ends_with(".webm")):
 			p += ".mov"
 		_stop()
 		_export_bar.value = 0

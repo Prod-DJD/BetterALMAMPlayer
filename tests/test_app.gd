@@ -246,5 +246,9 @@ func _initialize() -> void:
 	check(icons_ok and Icons.names().size() >= 100, "%d icons all drawn" % Icons.names().size())
 	for k in ["winds", "drums", "fx"]:
 		check(IconData.SHAPES.has(Icons.ALIASES[k]), "old icon name %s still works" % k)
+	# ---- transparent formats
+	check(Exporter.wants_alpha("a.mov") and Exporter.wants_alpha("a.webm") and not Exporter.wants_alpha("a.mp4"), "alpha for .mov and .webm only")
+	check(Exporter.alpha_codec_for("a.webm", "prores") == "vp9" and Exporter.alpha_codec_for("a.mov", "hevc") == "hevc", "a .webm is always VP9; a .mov takes the look's choice")
+	check(Look.from_dict({"alpha_codec": "hevc"}).alpha_codec == "hevc" and Look.from_dict({"alpha_codec": "nope"}).alpha_codec == "prores", "alpha codec saved, bad values fall back")
 	print("FAILS: ", fails)
 	quit(1 if fails else 0)

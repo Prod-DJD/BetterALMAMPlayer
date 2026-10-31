@@ -1,7 +1,8 @@
 ## Renders a song to a video: each frame is drawn at its exact time and
 ## handed straight to ffmpeg, which adds the song's own audio file (not a
 ## recording of it). No second app, no giant AVI, and it can be stopped.
-## A .mov is written with an alpha channel (ProRes 4444): the notes are
+## A .mov (ProRes 4444, HEVC or VP9 by the look) or a .webm (VP9) keeps an
+## alpha channel: the notes are
 ## drawn over nothing, so they drop straight onto other footage with no
 ## keying. Any other name (.mp4) is a normal video on black.
 class_name Exporter
@@ -34,8 +35,20 @@ static func ffmpeg_path() -> String:
 func cancel() -> void:
 	_cancel = true
 
+## Megabits per second for HEVC at a frame height (a sensible fixed rate).
+static func _mbps(height: int) -> int:
+	return 40 if height >= 2160 else (20 if height >= 1440 else 12)
+
 static func wants_alpha(out: String) -> bool:
-	return out.to_lower().ends_with(".mov")
+	var low := out.to_lower()
+	return low.ends_with(".mov") or low.ends_with(".webm")
+
+## The video codec for a transparent [out]: a .webm is always VP9 (WebM
+## carries VP9, not ProRes); a .mov uses the look's choice.
+static func alpha_codec_for(out: String, codec: String) -> String:
+	if out.to_lower().ends_with(".webm"):
+		return "vp9"
+	return codec
 
 ## Renders [song] with [look] (and [audio], if any) to [out] at [fps].
 func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT, audio_length := 0.0) -> void:
@@ -72,6 +85,7 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 		"-y", "-hide_banner", "-loglevel", "error",
 		"-f", "rawvideo", "-pix_fmt", "rgba", "-s", "%dx%d" % [width, height], "-r", str(fps), "-i", "-",
 	])
+	var webm := out.to_lower().ends_with(".webm")
 	if audio != "" and FileAccess.file_exists(audio):
 		# the audio starts when the song does (plus its delay), after the lead-in
 		var at := LEAD + look.audio_offset
@@ -79,13 +93,25 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 			args.append_array(["-itsoffset", "%.4f" % at, "-i", audio])
 		else:
 			args.append_array(["-ss", "%.4f" % -at, "-i", audio])
-		args.append_array(["-map", "0:v", "-map", "1:a", "-c:a", "aac", "-b:a", "320k"])
+		args.append_array(["-map", "0:v", "-map", "1:a"])
+		# WebM carries Opus, the .mov files AAC
+		args.append_array(["-c:a", "libopus", "-b:a", "192k"] if webm else ["-c:a", "aac", "-b:a", "320k"])
 	if look.square:
 		args.append_array(["-vf", "crop=%d:%d" % [height, height]])
 	if alpha:
-		# ProRes 4444 with alpha: Final Cut, Premiere, Resolve and After Effects read it
-		args.append_array(["-c:v", "prores_ks", "-profile:v", "4444", "-pix_fmt", "yuva444p10le",
-				"-alpha_bits", "16", "-vendor", "apl0"])
+		match alpha_codec_for(out, look.alpha_codec):
+			"hevc":
+				# Apple's compact transparent video (macOS): smaller than ProRes
+				args.append_array(["-c:v", "hevc_videotoolbox", "-alpha_quality", "0.75",
+						"-tag:v", "hvc1", "-b:v", "%dM" % _mbps(height), "-pix_fmt", "bgra"])
+			"vp9":
+				# alpha needs auto-alt-ref off; CRF with no bitrate cap
+				args.append_array(["-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-b:v", "0",
+						"-crf", "28", "-auto-alt-ref", "0", "-row-mt", "1"])
+			_:
+				# ProRes 4444 with alpha: Final Cut, Premiere, Resolve and After Effects read it
+				args.append_array(["-c:v", "prores_ks", "-profile:v", "4444", "-pix_fmt", "yuva444p10le",
+						"-alpha_bits", "16", "-vendor", "apl0"])
 	else:
 		args.append_array(["-c:v", "libx264", "-preset", "medium", "-crf", "16", "-pix_fmt", "yuv420p",
 				"-movflags", "+faststart"])

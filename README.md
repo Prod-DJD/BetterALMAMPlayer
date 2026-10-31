@@ -25,8 +25,16 @@ open a song, tweak the look, fix the notes, and export.
 
 ## Download
 
-Get the latest build from [Releases](https://github.com/Prod-DJD/BetterALMAMPlayer/releases/latest) (macOS, Apple silicon and Intel).
-The app is ad-hoc signed, not notarized, so macOS asks before the first launch: right-click the app, choose **Open**, then **Open** again.
+Get the latest build from [Releases](https://github.com/Prod-DJD/BetterALMAMPlayer/releases/latest):
+
+| Platform | File | Notes |
+|---|---|---|
+| macOS (Apple silicon and Intel) | `Better-ALMAMPlayer-…-macOS.zip` | Not notarized: right-click the app, choose **Open**, then **Open** again. Includes ffmpeg. |
+| Windows (64-bit) | `Better-ALMAMPlayer-…-Windows.zip` | Video export needs ffmpeg on your PATH (`winget install ffmpeg`). |
+| Linux (64-bit) | `Better-ALMAMPlayer-…-Linux.tar.gz` | Unzip, make it executable, run it. Video export needs ffmpeg (`sudo apt install ffmpeg`). |
+| iOS (jailbroken devices) | `Better-ALMAMPlayer-…-iOS-unsigned.ipa` | Unsigned: install it with your jailbreak's installer. Video export isn't available on iOS. |
+
+Android isn't built yet.
 
 ## Using it
 
@@ -44,7 +52,7 @@ The app is ad-hoc signed, not notarized, so macOS asks before the first launch: 
 ## Build from source
 
 You need [Godot 4.7](https://godotengine.org). Open the project and run it, or on a Mac run
-`tools/build_macos.sh` (see the comments in it for ffmpeg). Video export needs ffmpeg: the Mac build bundles it,
+`tools/build_macos.sh` (see the comments in it for ffmpeg), or export Windows, Linux or iOS from Godot. Video export needs ffmpeg: the Mac build bundles it,
 otherwise it is found on your system (for example `brew install ffmpeg`). Tests and developer notes are in
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 

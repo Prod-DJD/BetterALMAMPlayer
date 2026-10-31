@@ -38,3 +38,10 @@ These need Pillow (and numpy for the brand script).
 ## Building
 
 `tools/build_macos.sh` (needs Godot 4.7 with export templates). Video export needs ffmpeg at runtime.
+
+Other platforms are export presets in `export_presets.cfg`: **Windows Desktop**, **Linux** and **iOS**. Export them with Godot's `--export-release "<name>" <path>` (see the platform's folder under `build/`). Notes:
+
+- Godot 4.7 export templates (`export_templates/4.7.2.stable/`) are needed for each platform.
+- The iOS preset writes an Xcode project. Build it unsigned with `xcodebuild -project … -scheme ALMAMPlayer -sdk iphoneos -configuration Release CODE_SIGNING_ALLOWED=NO build`, then put the `.app` in a `Payload/` folder and zip it as an `.ipa`. The Team ID in the preset is a placeholder that unsigned builds ignore.
+- Windows and Linux don't bundle ffmpeg (the macOS build does), so video export there uses the system's.
+- Android isn't set up: it needs the Android SDK and a JDK.

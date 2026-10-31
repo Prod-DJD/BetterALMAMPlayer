@@ -9,6 +9,9 @@ class Note:
 	var start: float
 	var end: float
 	var velocity: int
+	## How hard the note was let go (note-off velocity), or -1 if the file
+	## didn't say. A hard release ends the note's glow sooner.
+	var release := -1
 
 class Track:
 	var name := ""
@@ -105,6 +108,7 @@ func _build(data) -> void:
 					if open.has(key) and open[key].size() > 0:
 						var n: Note = open[key].pop_front()
 						n.end = max(n.start, to_seconds.call(e.time))
+						n.release = ev.velocity if ev.velocity > 0 else -1
 						track.notes.append(n)
 				SMF.MIDIEventType.program_change:
 					if track.program < 0:
@@ -173,12 +177,13 @@ func refresh() -> void:
 		lowest = 60
 		highest = 72
 
-static func make_note(pitch: int, start: float, end: float, velocity: int) -> Note:
+static func make_note(pitch: int, start: float, end: float, velocity: int, release := -1) -> Note:
 	var n := Note.new()
 	n.pitch = pitch
 	n.start = start
 	n.end = end
 	n.velocity = velocity
+	n.release = release
 	return n
 
 # ---------------------------------------------------------------- edits
@@ -219,7 +224,7 @@ func edits() -> Dictionary:
 			var k := note_key(n)
 			now[k] = now.get(k, 0) + 1
 			if now[k] > before.get(k, 0):
-				added.append([n.pitch, snappedf(n.start, 0.001), snappedf(n.end, 0.001), n.velocity])
+				added.append([n.pitch, snappedf(n.start, 0.001), snappedf(n.end, 0.001), n.velocity, n.release])
 		var removed := []
 		for k in before:
 			for i in before[k] - now.get(k, 0):
@@ -247,8 +252,8 @@ func apply_edits(saved: Dictionary) -> void:
 				kept.append(n)
 		tr.notes = kept
 		for a in e.get("added", []):
-			if a is Array and a.size() == 4:
-				tr.notes.append(make_note(int(a[0]), float(a[1]), float(a[2]), int(a[3])))
+			if a is Array and a.size() >= 4:
+				tr.notes.append(make_note(int(a[0]), float(a[1]), float(a[2]), int(a[3]), int(a[4]) if a.size() > 4 else -1))
 	refresh()
 
 # ---------------------------------------------------------------- tracks
@@ -419,7 +424,7 @@ func save_midi(out_path: String) -> Error:
 			var a := roundi(n.start * ticks_per_s)
 			var b: int = max(a + 1, roundi(n.end * ticks_per_s))
 			ev.append([a, 1, PackedByteArray([0x90 | ch, n.pitch, clampi(n.velocity, 1, 127)])])
-			ev.append([b, 0, PackedByteArray([0x80 | ch, n.pitch, 0])])
+			ev.append([b, 0, PackedByteArray([0x80 | ch, n.pitch, clampi(n.release, 0, 127) if n.release >= 0 else 0])])
 		for bd in tr.bends:
 			var v := clampi(8192 + roundi(bd.y * 8192.0), 0, 16383)
 			ev.append([roundi(bd.x * ticks_per_s), 0, PackedByteArray([0xE0 | ch, v & 127, v >> 7])])

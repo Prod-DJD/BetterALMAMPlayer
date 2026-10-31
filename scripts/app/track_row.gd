@@ -163,14 +163,7 @@ func set_drop_hint(side: int) -> void:
 	queue_redraw()
 
 func _current_icon() -> String:
-	if tl.icon != "":
-		return tl.icon
-	# a part split off by pitch is named by what it is ("Snare"); a drum
-	# track's instrument number means nothing, so only its name counts
-	var g := Icons.guess(track.lane if track.lane != "" else track.name, -1 if track.drums else track.program)
-	if g == "generic" and track.drums:
-		return "drumkit"
-	return g
+	return Icons.for_track(tl.icon, track)
 
 func _fill_menu(menu: PopupMenu) -> void:
 	menu.clear()

@@ -846,7 +846,7 @@ func _rebuild_scene() -> void:
 	_slider("Speed", 80, 1200, 10, l.speed, func(v): l.speed = v, "px/s")
 	_slider("Notes reach up to", 200, 1080, 1, l.top_margin, func(v): l.top_margin = v, "px")
 	_slider("Lowest note sits at", 0, 700, 1, -l.vertical_offset, func(v): l.vertical_offset = -v, "px up")
-	_slider("Velocity effect", 0, 1, 0.01, l.velocity_strength, func(v): l.velocity_strength = v)
+	_slider("Velocity effect", 0, 1, 0.01, l.velocity_strength, func(v): l.velocity_strength = v, "note on & off")
 	_slider("Pitch bend", 0, 2, 0.01, l.pitch_bend_strength, func(v): l.pitch_bend_strength = v)
 	_slider("Glow", 0, 1.5, 0.01, l.glow, func(v): l.glow = v)
 	_slider("Note thickness", 0.4, 2.0, 0.01, l.thickness, func(v): l.thickness = v, "×")

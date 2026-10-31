@@ -174,6 +174,16 @@ static func guess(track_name: String, program: int) -> String:
 		return GM[program]
 	return "generic"
 
+## The icon a track shows: the one the person chose, else one picked from
+## its name (a drum part by its drum name) or its instrument.
+static func for_track(chosen: String, track: Song.Track) -> String:
+	if chosen != "":
+		return chosen
+	var g := guess(track.lane if track.lane != "" else track.name, -1 if track.drums else track.program)
+	if g == "generic" and track.drums:
+		return "drumkit"
+	return g
+
 ## Draws [kind] in [rect] (centered, square) in [color].
 static func draw(ci: CanvasItem, kind: String, rect: Rect2, color: Color) -> void:
 	var id: String = ALIASES.get(kind, kind)

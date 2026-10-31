@@ -31,6 +31,7 @@ var time := 0.0:
 var _tex_cache := {} # path → Texture2D (the background picture only)
 var _background: Texture2D
 var _background_path := "?"
+var _icons := {} # track name → icon name (worked out once per song)
 var _body := StyleBoxFlat.new()
 var _sheen := StyleBoxFlat.new()
 
@@ -42,6 +43,7 @@ func _init() -> void:
 ## Call after the song or look changed in ways that need reloading
 ## (the background picture).
 func refresh() -> void:
+	_icons.clear()
 	_background_path = "?"
 	queue_redraw()
 
@@ -114,6 +116,10 @@ func _draw() -> void:
 			if n.start > to_t:
 				break
 			var dur: float = n.end - n.start if not tl.staccato else 0.1
+			# the note lets go faster for a hard release (note-off velocity)
+			var release_t := 0.27
+			if look.velocity_strength >= 0.01 and n.release >= 0:
+				release_t = lerpf(0.5, 0.1, n.release / 127.0)
 			var x := PLAYHEAD + (n.start - time) * px_per_s
 			var w: float = note_h * 1.2 if tl.staccato else max(dur * px_per_s, note_h * 0.9)
 			if x + w < 0:
@@ -129,7 +135,7 @@ func _draw() -> void:
 			if on >= 0.0:
 				var off: float = time - (n.start + max(dur, 0.1))
 				var up := _ease(on / 0.17)
-				var down := 1.0 - _ease(off / 0.27) if off > 0.0 else 1.0
+				var down := 1.0 - _ease(off / release_t) if off > 0.0 else 1.0
 				light = 0.3 * up * down
 				dip = dip_px * up * down
 				swell = 0.03 * _ease(on / 0.2)
@@ -158,9 +164,17 @@ func _draw() -> void:
 			draw_set_transform(Vector2.ZERO)
 			# its pulse, at the playhead
 			if on >= 0.0 and on < max(dur - 0.025, 0.065) + 0.17:
-				effects.append([tl, n, y + dip, on, dur])
+				effects.append([tl, n, y + dip, on, dur, _icon_of(tr, tl)])
 	_draw_effects(effects)
 
+## The track's icon, worked out once per song (not on every frame).
+func _icon_of(tr: Song.Track, tl: Look.TrackLook) -> String:
+	if not _icons.has(tr.name):
+		_icons[tr.name] = Icons.for_track(tl.icon, tr)
+	return _icons[tr.name]
+
+## Each note hit draws the track's own icon at the playhead, with a soft
+## glow behind it, and it fades out as the note ends.
 func _draw_effects(effects: Array) -> void:
 	for e in effects:
 		var tl: Look.TrackLook = e[0]
@@ -168,6 +182,7 @@ func _draw_effects(effects: Array) -> void:
 		var y: float = e[2]
 		var on: float = e[3]
 		var dur: float = e[4]
+		var kind: String = e[5]
 		var hold: float = max(dur - 0.025, 0.065)
 		var s := 1.0
 		var a := 1.0
@@ -183,17 +198,18 @@ func _draw_effects(effects: Array) -> void:
 			s *= 0.55 + n.velocity / 127.0 * 0.5
 		var col: Color = tl.color
 		var center := Vector2(PLAYHEAD, y)
-		var r: float = note_height() * 0.95 * s
-		if r < 0.5:
+		var size: float = note_height() * 2.6 * s
+		if size < 1.0:
 			continue
 		var g := look.glow
-		# a soft halo, a ring, a bright core
-		var radii := [2.3, 1.7, 1.25]
+		# a soft halo behind the icon
+		var r := size * 0.6
 		var fades := [0.07, 0.11, 0.17]
+		var radii := [2.3, 1.7, 1.25]
 		for k in 3:
 			draw_circle(center, r * radii[k], Color(col.r, col.g, col.b, fades[k] * g * a))
-		draw_arc(center, r, 0.0, TAU, 48, Color(col.r + 0.1, col.g + 0.1, col.b + 0.1, a), maxf(2.0, r * 0.14), true)
-		draw_circle(center, r * 0.45, Color(minf(col.r + 0.35, 1.0), minf(col.g + 0.35, 1.0), minf(col.b + 0.35, 1.0), a * 0.95))
+		Icons.draw(self, kind, Rect2(center - Vector2.ONE * size / 2.0, Vector2.ONE * size), Color(
+			minf(col.r + 0.1, 1.0), minf(col.g + 0.1, 1.0), minf(col.b + 0.1, 1.0), a))
 
 func _draw_background() -> void:
 	if _background_path != look.background:

@@ -492,7 +492,7 @@ func _dump(tr: Song.Track) -> Array:
 	var out := []
 	if tr:
 		for n in tr.notes:
-			out.append([n.pitch, n.start, n.end, n.velocity])
+			out.append([n.pitch, n.start, n.end, n.velocity, n.release])
 	return out
 
 func _push_undo() -> void:
@@ -513,7 +513,7 @@ func _restore(entry: Dictionary) -> Dictionary:
 	var now := {"track": entry["track"], "notes": _dump(tr)}
 	var notes: Array[Song.Note] = []
 	for d in entry["notes"]:
-		notes.append(Song.make_note(d[0], d[1], d[2], d[3]))
+		notes.append(Song.make_note(d[0], d[1], d[2], d[3], d[4] if d.size() > 4 else -1))
 	tr.notes = notes
 	selected.clear()
 	song.refresh()

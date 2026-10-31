@@ -246,6 +246,11 @@ func _initialize() -> void:
 	check(icons_ok and Icons.names().size() >= 100, "%d icons all drawn" % Icons.names().size())
 	for k in ["winds", "drums", "fx"]:
 		check(IconData.SHAPES.has(Icons.ALIASES[k]), "old icon name %s still works" % k)
+	# ---- full screen preview
+	app.set_fullscreen_preview(true)
+	check(not app._left.visible and not app._right.visible and not app._top.visible and not app._transport.visible and app._frame.visible, "full screen: only the video is left")
+	app.set_fullscreen_preview(false)
+	check(app._left.visible and app._right.visible and app._top.visible and app._transport.visible, "full screen: leaving brings the panels back")
 	# ---- transparent formats
 	check(Exporter.wants_alpha("a.mov") and Exporter.wants_alpha("a.webm") and not Exporter.wants_alpha("a.mp4"), "alpha for .mov and .webm only")
 	check(Exporter.alpha_codec_for("a.webm", "prores") == "vp9" and Exporter.alpha_codec_for("a.mov", "hevc") == "hevc", "a .webm is always VP9; a .mov takes the look's choice")

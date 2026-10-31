@@ -30,6 +30,15 @@ var _play_btn: Button
 var _empty: Control
 var _frame: Control
 var _vp: SubViewport
+var _bg_rect: ColorRect
+var _margin: MarginContainer
+var _left: Control
+var _right: Control
+var _top: Control
+var _transport: Control
+var _fullscreen := false
+var _prev_window_mode := Window.MODE_WINDOWED
+var _fs_hint: Label
 var _editor: NoteEditor
 var _preview_btn: Button
 var _edit_btn: Button
@@ -42,6 +51,12 @@ var _seeking := false
 
 func _ready() -> void:
 	get_window().min_size = Vector2i(1100, 640)
+	if OS.has_feature("mobile"):
+		# the window is laid out for a desktop: show it scaled to fit a landscape screen
+		var win := get_window()
+		win.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+		win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
+		win.content_scale_size = Vector2i(1280, 720)
 	get_window().files_dropped.connect(_on_files_dropped)
 	theme = _make_theme()
 	_build()
@@ -62,10 +77,21 @@ func _ready() -> void:
 	if args.has("render"):
 		_render_and_quit(args["render"], args.get("out", args["render"].get_basename() + ".mp4"))
 		return
-	# the last song, as it was left
+	# the last song, as it was left, unless the last start never finished (a
+	# song that crashes the app must not trap it in a crash loop)
 	var last := str(Project.state().get("last", ""))
-	if last != "" and FileAccess.file_exists(last):
+	var marker := "user://starting"
+	if FileAccess.file_exists(marker):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(marker))
+		_show_empty()
+		_flash("The last start didn't finish, so the last song wasn't reopened.")
+	elif last != "" and FileAccess.file_exists(last):
+		var m := FileAccess.open(marker, FileAccess.WRITE)
+		if m:
+			m.store_string("1")
+			m.close()
 		open_song(last)
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(marker))
 	else:
 		_show_empty()
 
@@ -102,10 +128,12 @@ func _make_theme() -> Theme:
 
 func _build() -> void:
 	var bg := ColorRect.new()
+	_bg_rect = bg
 	bg.color = GROUND
 	bg.set_anchors_preset(PRESET_FULL_RECT)
 	add_child(bg)
 	var margin := MarginContainer.new()
+	_margin = margin
 	margin.set_anchors_preset(PRESET_FULL_RECT)
 	for side in ["left", "right", "top", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, 10)
@@ -116,6 +144,7 @@ func _build() -> void:
 
 	# left: tracks
 	var left := _panel("Tracks")
+	_left = left
 	left.custom_minimum_size.x = 380
 	cols.add_child(left)
 	var all_row := HFlowContainer.new()
@@ -139,6 +168,7 @@ func _build() -> void:
 	mid.add_theme_constant_override("separation", 8)
 	cols.add_child(mid)
 	var top := HBoxContainer.new()
+	_top = top
 	mid.add_child(top)
 	top.add_child(_button("Open…", _open_dialog, "A MIDI or an FL Studio / Ableton project, its sound, a background, or a look (or drop them here)"))
 	var recent := MenuButton.new()
@@ -159,6 +189,7 @@ func _build() -> void:
 	_edit_btn = _button("Edit notes", func(): _set_mode(true), "Fix, add and delete notes (Tab)")
 	_edit_btn.toggle_mode = true
 	top.add_child(_edit_btn)
+	top.add_child(_button("⛶", func(): set_fullscreen_preview(true), "Full screen: just the video (Esc to leave, F11 or ⌘F to toggle)"))
 	_status = Label.new()
 	_status.add_theme_color_override("font_color", TEXT_DIM)
 	_status.custom_minimum_size.x = 150 # a long message trims; it never widens the window
@@ -196,6 +227,7 @@ func _build() -> void:
 
 	_set_mode(false)
 	var transport := HBoxContainer.new()
+	_transport = transport
 	mid.add_child(transport)
 	transport.add_child(_button("⏮", func(): seek_to(-Exporter.LEAD), "Back to the start"))
 	_play_btn = _button("▶  Play", toggle_play, "Play / pause (space)")
@@ -227,6 +259,7 @@ func _build() -> void:
 
 	# right: the scene
 	var right := _panel("Scene")
+	_right = right
 	right.custom_minimum_size.x = 300
 	cols.add_child(right)
 	var rs := ScrollContainer.new()
@@ -476,8 +509,12 @@ func _unhandled_input(e: InputEvent) -> void:
 					accept_event()
 			KEY_F11, KEY_F:
 				if e.keycode == KEY_F11 or e.meta_pressed:
-					var w := get_window()
-					w.mode = Window.MODE_WINDOWED if w.mode == Window.MODE_FULLSCREEN else Window.MODE_FULLSCREEN
+					set_fullscreen_preview(not _fullscreen)
+					accept_event()
+			KEY_ESCAPE:
+				if _fullscreen:
+					set_fullscreen_preview(false)
+					accept_event()
 
 # ---------------------------------------------------------------- saving
 
@@ -945,7 +982,7 @@ func _rebuild_scene() -> void:
 	_scene_box.add_child(lrow)
 
 	var keys := Label.new()
-	keys.text = "\nSpace: play / pause · ← →: 5 s · Home: start · Tab: edit notes · ⌘F: full screen"
+	keys.text = "\nSpace: play / pause · ← →: 5 s · Home: start · Tab: edit notes · F11 or ⌘F: full screen (Esc leaves)"
 	keys.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	keys.add_theme_color_override("font_color", TEXT_DIM)
 	keys.add_theme_font_size_override("font_size", 12)
@@ -994,6 +1031,48 @@ func _save_look_dialog() -> void:
 	add_child(d)
 	d.popup_centered(Vector2i(360, 100))
 	e.grab_focus()
+
+# ---------------------------------------------------------------- full screen
+
+## Just the video, filling the screen: the panels, the title bar and the
+## transport go away (Esc or F11 brings them back). Space, the arrow keys and
+## a click still play, pause and move.
+func set_fullscreen_preview(on: bool) -> void:
+	if on == _fullscreen or _frame == null:
+		return
+	_fullscreen = on
+	var w := get_window()
+	if on:
+		_prev_window_mode = w.mode
+		_set_mode(false)
+		w.mode = Window.MODE_FULLSCREEN
+	else:
+		w.mode = _prev_window_mode
+	for c in [_left, _right, _top, _transport, _export_row]:
+		c.visible = not on
+	for side in ["left", "right", "top", "bottom"]:
+		_margin.add_theme_constant_override("margin_" + side, 0 if on else 10)
+	_bg_rect.color = Color.BLACK if on else GROUND
+	if on:
+		_show_fs_hint()
+
+func _show_fs_hint() -> void:
+	if _fs_hint == null:
+		_fs_hint = Label.new()
+		_fs_hint.text = "Esc to leave · Space plays and pauses · ← → move"
+		_fs_hint.add_theme_color_override("font_color", Color(1, 1, 1, 0.8))
+		_fs_hint.add_theme_font_size_override("font_size", 16)
+		_fs_hint.set_anchors_preset(PRESET_CENTER_BOTTOM)
+		_fs_hint.grow_horizontal = GROW_DIRECTION_BOTH
+		_fs_hint.offset_top = -56
+		_fs_hint.mouse_filter = MOUSE_FILTER_IGNORE
+		add_child(_fs_hint)
+	_fs_hint.modulate.a = 1.0
+	_fs_hint.visible = true
+	var tw := create_tween()
+	tw.tween_interval(2.0)
+	tw.tween_property(_fs_hint, "modulate:a", 0.0, 0.6)
+	tw.tween_callback(func(): _fs_hint.visible = false)
 
 # ---------------------------------------------------------------- editing
 

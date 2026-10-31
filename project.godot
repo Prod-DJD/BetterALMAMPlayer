@@ -21,9 +21,6 @@ boot_splash/use_filter=true
 config/icon="res://icon.png"
 boot_splash/minimum_display_time=100
 
-[audio]
-
-enable_audio_input=true
 
 
 [debug]
@@ -35,6 +32,7 @@ file_logging/enable_file_logging=true
 window/size/viewport_width=1440
 window/size/viewport_height=860
 window/subwindows/embed_subwindows=false
+window/handheld/orientation=0
 window/stretch/mode="disabled"
 
 [editor]

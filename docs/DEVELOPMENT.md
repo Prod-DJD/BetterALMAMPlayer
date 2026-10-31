@@ -42,6 +42,7 @@ These need Pillow (and numpy for the brand script).
 Other platforms are export presets in `export_presets.cfg`: **Windows Desktop**, **Linux** and **iOS**. Export them with Godot's `--export-release "<name>" <path>` (see the platform's folder under `build/`). Notes:
 
 - Godot 4.7 export templates (`export_templates/4.7.2.stable/`) are needed for each platform.
-- The iOS preset writes an Xcode project. Build it unsigned with `xcodebuild -project … -scheme ALMAMPlayer -sdk iphoneos -configuration Release CODE_SIGNING_ALLOWED=NO build`, then put the `.app` in a `Payload/` folder and zip it as an `.ipa`. The Team ID in the preset is a placeholder that unsigned builds ignore.
+- The iOS preset writes an Xcode project. Build it without signing using `xcodebuild -project … -scheme ALMAMPlayer -sdk iphoneos -configuration Release CODE_SIGNING_ALLOWED=NO build`, then put the `.app` in a `Payload/` folder and zip it as an `.ipa`. The Team ID in the preset is a placeholder that unsigned builds ignore.
 - Windows and Linux don't bundle ffmpeg (the macOS build does), so video export there uses the system's.
-- Android isn't set up: it needs the Android SDK and a JDK.
+- Android: install a JDK 17 and the Android SDK (platform-tools, build-tools 35.0.1, platforms/android-35), point Godot at them (Editor Settings: `export/android/java_sdk_path` and `android_sdk_path`), and export the **Android** preset (no Gradle needed). Sign the release APK with a key given through `GODOT_ANDROID_KEYSTORE_RELEASE_PATH`, `_USER` and `_PASSWORD`, never saved in the preset. Keep that keystore safe: an APK signed with a different key can't update an installed one.
+- The iOS build is signed ad hoc (`codesign --force --sign - --deep Payload/ALMAMPlayer.app`) so a jailbroken device will run it.

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.1
+
+- **Full-screen preview**: the ⛶ button, F11 or ⌘F shows just the video, filling the screen (Esc leaves). Space, the arrows and a click still work.
+- **Android**: an APK for Android 7.0 and up (arm64). Video export isn't available on Android or iOS.
+- The iOS build is now signed ad hoc and runs on iPhone and iPad (it was marked iPad-only and had no signature, so it was killed on launch).
+- The app no longer starts the last song again if the previous start never finished, so a song that breaks the app can't trap it in a crash loop.
+- Removed a leftover microphone setting from the original project.
+- On phones and tablets the window scales to fit a landscape screen.
+
 ## 1.0.0
 
 The first full release. Everything in 0.1.0, plus:

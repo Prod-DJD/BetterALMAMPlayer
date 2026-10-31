@@ -1,7 +1,7 @@
 <p align="center"><img src="docs/banner.png" alt="Better ALMAMPlayer" width="100%"></p>
 
 <p align="center">
-  <a href="https://github.com/{{REPO}}/releases/latest"><img alt="Download" src="https://img.shields.io/badge/download-macOS-f7b955?style=for-the-badge&logo=apple&logoColor=black"></a>
+  <a href="https://github.com/Prod-DJD/BetterALMAMPlayer/releases/latest"><img alt="Download" src="https://img.shields.io/badge/download-macOS-f7b955?style=for-the-badge&logo=apple&logoColor=black"></a>
   <img alt="License" src="https://img.shields.io/badge/license-GPLv3-f7b955?style=for-the-badge">
   <img alt="Godot" src="https://img.shields.io/badge/Godot-4.7-478cbf?style=for-the-badge&logo=godotengine&logoColor=white">
 </p>
@@ -25,7 +25,7 @@ open a song, tweak the look, fix the notes, and export.
 
 ## Download
 
-Get the latest build from [Releases](https://github.com/{{REPO}}/releases/latest) (macOS, Apple silicon and Intel).
+Get the latest build from [Releases](https://github.com/Prod-DJD/BetterALMAMPlayer/releases/latest) (macOS, Apple silicon and Intel).
 The app is ad-hoc signed, not notarized, so macOS asks before the first launch: right-click the app, choose **Open**, then **Open** again.
 
 ## Using it

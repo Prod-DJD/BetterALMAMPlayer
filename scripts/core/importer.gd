@@ -1,18 +1,16 @@
 ## Opens a song from whatever the person has: a MIDI file, or a project from
-## FL Studio (.flp) or Ableton Live (.als), with every track found by
-## itself. Logic projects (.logicx) can't be read directly: see
-## [member LOGIC_HELP].
+## FL Studio (.flp), Ableton Live (.als) or Logic Pro (.logicx), with every
+## track found by itself.
 class_name Importer
 extends RefCounted
 
-const EXTENSIONS := ["mid", "midi", "flp", "als"]
-const LOGIC_HELP := "Logic projects can't be opened directly. In Logic: File ▸ Export ▸ All Tracks as MIDI Files…, then drop that .mid here."
+const EXTENSIONS := ["mid", "midi", "flp", "als", "logicx"]
 
 ## Why the last open failed, in words for the person.
 static var last_error := ""
 
 static func is_song_file(path: String) -> bool:
-	return path.get_extension().to_lower() in EXTENSIONS or path.get_extension().to_lower() == "logicx"
+	return path.get_extension().to_lower() in EXTENSIONS
 
 static func load_song(path: String) -> Song:
 	last_error = ""
@@ -26,11 +24,10 @@ static func load_song(path: String) -> Song:
 			return s
 		"flp":
 			return FlpReader.read(path)
+		"logicx":
+			return LogicReader.read(path)
 		"als":
 			return AbletonReader.read(path)
-		"logicx":
-			last_error = LOGIC_HELP
-			return null
 	last_error = "That kind of file can't be opened."
 	return null
 

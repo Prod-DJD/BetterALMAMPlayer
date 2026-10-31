@@ -2,7 +2,7 @@
 
 ## How it's laid out
 
-- `scripts/core/`: no UI. `song.gd` (notes in seconds, edits, splits, MIDI writer), `look.gd` (everything about how it looks), `project.gd` (what is saved per song), `visualizer.gd` (draws a frame from a time), `exporter.gd` (frames to ffmpeg), `icons.gd` + generated `icon_data.gd` (the icons), `importer.gd`, `flp_reader.gd`, `ableton_reader.gd`.
+- `scripts/core/`: no UI. `song.gd` (notes in seconds, edits, splits, MIDI writer), `look.gd` (everything about how it looks), `project.gd` (what is saved per song), `visualizer.gd` (draws a frame from a time), `exporter.gd` (frames to ffmpeg), `icons.gd` + generated `icon_data.gd` (the icons), `importer.gd`, `flp_reader.gd`, `ableton_reader.gd`, `logic_reader.gd` (ported from the MIT LogicBridge: see licenses/).
 - `scripts/app/`: the window. `app.gd`, `track_row.gd`, the note editor (`note_editor.gd`, `note_canvas.gd`), small widgets.
 - `addons/midi/`: the MIDI file parser (godot-midi-player by arlez80).
 - `assets/branding/`: scripts that draw the app icon, launch screen and icon library.
@@ -21,6 +21,7 @@ Headless Godot, from the project folder:
 godot --headless --path . -s tests/test_core.gd           # importers, edits, MIDI round trip, release velocity
 godot --headless --path . -s tests/test_app.gd            # the whole app: editing, splits, rename, toggles, drag and drop
 godot --headless --path . -s tests/test_icon_polygons.gd  # every icon fill can be triangulated
+LOGIC_SAMPLE=/path/to/Project.logicx godot --headless --path . -s tests/test_logic.gd  # Logic reader vs the converter's counts
 ```
 
 The headless renderer draws nothing, so these cover logic and make sure drawing code runs; look at the app itself for how it looks.

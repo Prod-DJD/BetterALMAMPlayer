@@ -39,7 +39,7 @@ The app is ad-hoc signed, not notarized, so macOS asks before the first launch: 
 | MIDI (`.mid`, `.midi`) | directly |
 | FL Studio (`.flp`) | every channel with notes becomes a track, placed where the playlist puts it. The first tempo is used throughout; audio clips and plugin sounds aren't read |
 | Ableton Live (`.als`) | MIDI clips from the arrangement, looped clips repeated. The set's tempo is used throughout |
-| Logic Pro | export from Logic with **File ▸ Export ▸ All Tracks as MIDI File**, then drop the MIDI |
+| Logic Pro (`.logicx`) | the project folder itself: every MIDI track in the arrange, in its order. Tempo changes and audio regions aren't read; the first tempo is used throughout |
 
 ## Build from source
 
@@ -52,6 +52,7 @@ otherwise it is found on your system (for example `brew install ffmpeg`). Tests 
 
 - **ALMAMPlayer** by [almam](https://github.com/almam72), with contributions from speaksy and yohannd1: this project is built on their work.
 - The MIDI parser is from [godot-midi-player](https://github.com/arlez80/godot-midi-player) by arlez80.
+- The Logic Pro reader is ported from the MIT-licensed LogicBridge in the FLP to Logic converter (Jon Kubis), see [licenses/LogicBridge-MIT.txt](licenses/LogicBridge-MIT.txt).
 - Video is written with [FFmpeg](https://ffmpeg.org); the engine is [Godot](https://godotengine.org).
 - Better ALMAMPlayer by DJ D.
 

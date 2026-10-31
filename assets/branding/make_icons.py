@@ -603,9 +603,11 @@ line(0.5, 0.06, 0.5, 0.94, 0.5)
 icon("loop", "Loop")
 arc(0.5, 0.5, 0.3, 200, 340, 1.4); arrowhead(0.5 + 0.3 * math.cos(math.radians(340)), 0.5 + 0.3 * math.sin(math.radians(340)), 70, 0.12, 1.4)
 arc(0.5, 0.5, 0.3, 20, 160, 1.4); arrowhead(0.5 + 0.3 * math.cos(math.radians(160)), 0.5 + 0.3 * math.sin(math.radians(160)), 250, 0.12, 1.4)
-icon("generic", "Note")
+icon("generic", "Circles")
+ring(0.5, 0.5, 0.32, 1.2, 0.12); circle(0.5, 0.5, 0.13, 0.95)
+icon("note", "Note")
 circle(0.36, 0.74, 0.15); line(0.5, 0.72, 0.5, 0.14, 1.0); poly([(0.5, 0.14), (0.68, 0.24), (0.74, 0.42)], 1.0)
-category("Other", ["metronome", "speaker", "turntable", "sampler", "loop", "generic"])
+category("Other", ["generic", "note", "metronome", "speaker", "turntable", "sampler", "loop"])
 
 # old names saved in earlier looks keep working
 ALIASES = {"guitar": "guitar", "winds": "flute", "drums": "drumkit", "fx": "sfx", "pluck": "pluck", "strings": "strings"}

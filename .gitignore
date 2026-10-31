@@ -11,3 +11,6 @@ data_*/
 
 # the built app (made by .tools/build.sh)
 build/
+
+# files uploaded in chat (may hold secrets): never commit
+inbox/

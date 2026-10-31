@@ -48,7 +48,13 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 	running = true
 	_cancel = false
 	var vp := SubViewport.new()
-	vp.size = Vector2i(1920, 1080)
+	# drawn at the video's own size from the same 1920×1080 picture: shapes
+	# stay sharp at 1440p and 4K
+	var height: int = look.export_height
+	var width: int = int(round(height * 16.0 / 9.0))
+	vp.size = Vector2i(width, height)
+	vp.size_2d_override = Vector2i(1920, 1080)
+	vp.size_2d_override_stretch = true
 	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	var alpha := wants_alpha(out)
 	vp.transparent_bg = alpha
@@ -64,7 +70,7 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 	var frames := int(ceil((end - start) * fps))
 	var args := PackedStringArray([
 		"-y", "-hide_banner", "-loglevel", "error",
-		"-f", "rawvideo", "-pix_fmt", "rgba", "-s", "1920x1080", "-r", str(fps), "-i", "-",
+		"-f", "rawvideo", "-pix_fmt", "rgba", "-s", "%dx%d" % [width, height], "-r", str(fps), "-i", "-",
 	])
 	if audio != "" and FileAccess.file_exists(audio):
 		# the audio starts when the song does (plus its delay), after the lead-in
@@ -75,7 +81,7 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 			args.append_array(["-ss", "%.4f" % -at, "-i", audio])
 		args.append_array(["-map", "0:v", "-map", "1:a", "-c:a", "aac", "-b:a", "320k"])
 	if look.square:
-		args.append_array(["-vf", "crop=1080:1080"])
+		args.append_array(["-vf", "crop=%d:%d" % [height, height]])
 	if alpha:
 		# ProRes 4444 with alpha: Final Cut, Premiere, Resolve and After Effects read it
 		args.append_array(["-c:v", "prores_ks", "-profile:v", "4444", "-pix_fmt", "yuva444p10le",

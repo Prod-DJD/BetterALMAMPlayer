@@ -35,8 +35,8 @@ func setup(the_app, t: Song.Track, look: Look.TrackLook, i := 0) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	v.add_child(row)
-	var eye := CheckBox.new()
-	eye.button_pressed = tl.visible
+	var eye := PillSwitch.new()
+	eye.set_pressed_no_signal(tl.visible)
 	eye.tooltip_text = "Show this track"
 	eye.toggled.connect(func(on): tl.visible = on; app._changed())
 	row.add_child(eye)

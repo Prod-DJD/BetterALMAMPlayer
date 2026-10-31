@@ -29,6 +29,7 @@ var _seek: HSlider
 var _play_btn: Button
 var _empty: Control
 var _frame: Control
+var _vp: SubViewport
 var _editor: NoteEditor
 var _preview_btn: Button
 var _edit_btn: Button
@@ -182,13 +183,13 @@ func _build() -> void:
 	var holder := SubViewportContainer.new()
 	holder.stretch = true
 	frame.add_child(holder)
-	var vp := SubViewport.new()
-	vp.size = Vector2i(1920, 1080)
-	vp.size_2d_override = Vector2i(1920, 1080)
-	vp.size_2d_override_stretch = true
-	holder.add_child(vp)
+	_vp = SubViewport.new()
+	_vp.size = Vector2i(1920, 1080)
+	_vp.size_2d_override = Vector2i(1920, 1080)
+	_vp.size_2d_override_stretch = true
+	holder.add_child(_vp)
 	vis = Visualizer.new()
-	vp.add_child(vis)
+	_vp.add_child(vis)
 	holder.gui_input.connect(func(e): if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT: toggle_play())
 	_empty = _make_empty()
 	frame.add_child(_empty)
@@ -317,9 +318,20 @@ func open_song(path: String) -> void:
 	Project.remember(path)
 	_apply_project()
 
+## The preview shows the whole 16:9 picture, or just its middle square when
+## "Square video" is on (the export crops the same part).
+func _apply_square() -> void:
+	var sq: bool = project != null and project.look.square
+	# the container sets the viewport's pixel size; this sets what part of the
+	# 1920x1080 picture it shows (stretched to fit)
+	_vp.size_2d_override = Vector2i(1080, 1080) if sq else Vector2i(1920, 1080)
+	vis.position = Vector2(-420, 0) if sq else Vector2.ZERO
+	(_frame as AspectRatioContainer).ratio = 1.0 if sq else 16.0 / 9.0
+
 func _apply_project() -> void:
 	vis.song = song
 	vis.look = project.look
+	_apply_square()
 	vis.refresh()
 	_empty.visible = false
 	_export_btn.disabled = false
@@ -852,10 +864,27 @@ func _rebuild_scene() -> void:
 	_slider("Note thickness", 0.4, 2.0, 0.01, l.thickness, func(v): l.thickness = v, "×")
 	_slider("Audio delay", -1000, 1000, 5, l.audio_offset * 1000.0, func(v): l.audio_offset = v / 1000.0, "ms")
 	var sq := CheckButton.new()
-	sq.text = "Square video (1080×1080)"
+	sq.text = "Square video (1:1)"
 	sq.button_pressed = l.square
-	sq.toggled.connect(func(on): l.square = on; _changed())
+	sq.toggled.connect(func(on): l.square = on; _apply_square(); _changed())
 	_scene_box.add_child(sq)
+	_scene_box.add_child(_section("Export"))
+	var qrow := HBoxContainer.new()
+	var res := OptionButton.new()
+	for h in [[1080, "1080p"], [1440, "1440p"], [2160, "4K (2160p)"]]:
+		res.add_item(h[1], h[0])
+	res.select(res.get_item_index(l.export_height))
+	res.tooltip_text = "Video size. 4K takes much longer and makes big files."
+	res.item_selected.connect(func(i): l.export_height = res.get_item_id(i); _changed())
+	qrow.add_child(res)
+	var fps := OptionButton.new()
+	for f in [24, 30, 60, 120]:
+		fps.add_item("%d fps" % f, f)
+	fps.select(fps.get_item_index(l.export_fps))
+	fps.tooltip_text = "Frame rate. 120 fps is for slow motion or high-refresh screens."
+	fps.item_selected.connect(func(i): l.export_fps = fps.get_item_id(i); _changed())
+	qrow.add_child(fps)
+	_scene_box.add_child(qrow)
 
 	_scene_box.add_child(_section("Sound"))
 	var snd := Label.new()
@@ -1026,7 +1055,7 @@ func _export_dialog() -> void:
 		_export_bar.visible = true
 		_export_btn.text = "Stop exporting"
 		_status.text = "Exporting…"
-		_exporter.run(song, project.look, project.audio, p, Exporter.FPS_DEFAULT, _stream.get_length() if _stream else 0.0))
+		_exporter.run(song, project.look, project.audio, p, project.look.export_fps, _stream.get_length() if _stream else 0.0))
 	add_child(d)
 	d.popup_centered()
 
@@ -1040,7 +1069,7 @@ func _render_and_quit(midi: String, out: String) -> void:
 	_exporter.finished.connect(func(ok, msg):
 		print("done: " if ok else "failed: ", msg)
 		get_tree().quit(0 if ok else 1))
-	_exporter.run(song, project.look, project.audio, out, Exporter.FPS_DEFAULT, _stream.get_length() if _stream else 0.0)
+	_exporter.run(song, project.look, project.audio, out, project.look.export_fps, _stream.get_length() if _stream else 0.0)
 
 func _on_export_finished(ok: bool, message: String) -> void:
 	_export_bar.visible = false

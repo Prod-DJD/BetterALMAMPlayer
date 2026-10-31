@@ -51,6 +51,11 @@ var thickness := 1.0
 ## Seconds the notes are shifted against the audio (+: notes later).
 var audio_offset := 0.0
 var square := false
+## The exported video: its height in pixels (1080, 1440 or 2160 for 4K; the
+## width follows at 16:9, or the same as the height for a square video) and
+## its frame rate.
+var export_height := 1080
+var export_fps := 60
 var background := ""
 ## Track name → TrackLook
 var tracks := {}
@@ -82,7 +87,7 @@ func to_dict() -> Dictionary:
 		"top_margin": top_margin, "velocity_strength": velocity_strength,
 		"pitch_bend_strength": pitch_bend_strength, "audio_offset": audio_offset,
 			"glow": glow, "thickness": thickness,
-		"square": square, "background": background, "tracks": tr, "order": order,
+		"square": square, "export_height": export_height, "export_fps": export_fps, "background": background, "tracks": tr, "order": order,
 	}
 
 static func from_dict(d: Dictionary) -> Look:
@@ -96,6 +101,8 @@ static func from_dict(d: Dictionary) -> Look:
 	l.glow = float(d.get("glow", l.glow))
 	l.thickness = float(d.get("thickness", l.thickness))
 	l.square = bool(d.get("square", false))
+	l.export_height = int(d.get("export_height", 1080)) if int(d.get("export_height", 1080)) in [1080, 1440, 2160] else 1080
+	l.export_fps = int(d.get("export_fps", 60)) if int(d.get("export_fps", 60)) in [24, 30, 60, 120] else 60
 	l.background = str(d.get("background", ""))
 	var o = d.get("order", [])
 	if o is Array:

@@ -1,161 +1,215 @@
-## The instrument icons, drawn from lines, arcs and polygons (no picture
-## files): sharp at any size and in any color. [method guess] picks one for
-## a track from its General MIDI program or its name.
+## The instrument icons: ~100 of them, drawn from lines, curves and fills
+## (no picture files), so they are sharp at any size and take any color. The
+## shapes live in [IconData] (made by assets/branding/make_icons.py);
+## [method guess] picks one for a track from its name or General MIDI
+## program, [method draw] paints it.
 class_name Icons
 extends RefCounted
 
-const NAMES := [
-	"piano", "synth", "lead", "bass", "guitar", "pluck", "strings", "brass",
-	"winds", "vocal", "pad", "bell", "drums", "fx", "generic",
+## Icon names that older saved looks used.
+const ALIASES := {"winds": "flute", "drums": "drumkit", "fx": "sfx"}
+
+## What each General MIDI program (0-127) sounds like.
+const GM := [
+	"grandpiano", "piano", "grandpiano", "piano", "epiano", "epiano", "clav", "clav",
+	"glockenspiel", "glockenspiel", "musicbox", "vibraphone", "marimba", "xylophone", "tubular", "kalimba",
+	"organ", "organ", "organ", "organ", "accordion", "accordion", "harmonica", "accordion",
+	"guitar", "guitar", "electricguitar", "electricguitar", "electricguitar", "electricguitar", "electricguitar", "guitar",
+	"upright", "bass", "bass", "bass", "bass", "bass", "subbass", "acid",
+	"violin", "violin", "cello", "upright", "strings", "pluck", "harp", "timpani",
+	"strings", "strings", "strings", "strings", "choir", "choir", "vocoder", "stab",
+	"trumpet", "trombone", "tuba", "trumpet", "horn", "brass", "brass", "brass",
+	"sax", "sax", "sax", "sax", "oboe", "oboe", "bassoon", "clarinet",
+	"flute", "flute", "recorder", "panflute", "ocarina", "flute", "whistle", "ocarina",
+	"squarelead", "lead", "lead", "lead", "lead", "vocoder", "lead", "lead",
+	"pad", "pad", "synth", "choir", "pad", "pad", "pad", "sweep",
+	"rain", "pad", "glockenspiel", "ambience", "pad", "sfx", "ambience", "laser",
+	"sitar", "banjo", "mandolin", "koto", "kalimba", "bagpipes", "violin", "oboe",
+	"bell", "agogo", "steeldrum", "woodblock", "timpani", "tom", "drummachine", "reverse",
+	"glitch", "noise", "ambience", "sfx", "sfx", "sweep", "clap", "impact",
 ]
+
+## Words in a track's name that say what it is, most specific first. A short
+## word (4 letters or fewer) must start a word of the name ("hat", not
+## "whatever"); a longer one may appear anywhere.
+const WORDS := [
+	["kick", ["kick", "bd", "bass drum", "bassdrum"]],
+	["sidestick", ["side stick", "sidestick", "rimshot", "rim shot", "rim"]],
+	["snare", ["snare", "snr"]],
+	["clap", ["clap", "snap"]],
+	["openhat", ["open hat", "open hi", "openhat", "ohh", "open hh"]],
+	["hihat", ["hihat", "hi-hat", "hi hat", "closed", "chh", "hat", "hh"]],
+	["floortom", ["floor"]],
+	["tom", ["tom"]],
+	["crash", ["crash"]],
+	["ride", ["ride"]],
+	["cymbal", ["cymbal", "china", "splash", "cym"]],
+	["cowbell", ["cowbell"]],
+	["tambourine", ["tambourine", "tamb"]],
+	["shaker", ["shaker", "maraca", "cabasa"]],
+	["conga", ["conga", "perc"]],
+	["bongo", ["bongo", "timbale"]],
+	["triangle", ["triangle"]],
+	["woodblock", ["wood block", "woodblock", "wood"]],
+	["claves", ["clave"]],
+	["guiro", ["guiro", "cuica", "vibraslap"]],
+	["agogo", ["agogo"]],
+	["whistle", ["whistle"]],
+	["cajon", ["cajon", "cajón"]],
+	["timpani", ["timpani", "timp", "taiko"]],
+	["gong", ["gong"]],
+	["steeldrum", ["steel drum", "steeldrum", "steelpan", "steel pan"]],
+	["drummachine", ["drum machine", "drummachine", "909"]],
+	["drumkit", ["drum", "kit"]],
+	["bassoon", ["bassoon"]],
+	["upright", ["upright", "double bass", "doublebass", "contrabass"]],
+	["subbass", ["sub bass", "subbass", "sub", "808", "synth bass", "reese"]],
+	["acid", ["acid", "303"]],
+	["bass", ["bass"]],
+	["electricguitar", ["electric guitar", "e-guitar", "eguitar", "egtr", "distort", "overdrive", "lead guitar"]],
+	["guitar", ["guitar", "gtr", "nylon", "acoustic"]],
+	["banjo", ["banjo"]],
+	["mandolin", ["mandolin"]],
+	["ukulele", ["ukulele", "uke"]],
+	["sitar", ["sitar"]],
+	["koto", ["koto", "shamisen"]],
+	["clav", ["clav", "harpsichord"]],
+	["harp", ["harp"]],
+	["grandpiano", ["grand"]],
+	["epiano", ["epiano", "e-piano", "e piano", "rhodes", "wurli", "electric piano"]],
+	["organ", ["organ", "b3", "hammond"]],
+	["accordion", ["accordion"]],
+	["harmonica", ["harmonica", "mouth harp"]],
+	["mellotron", ["mellotron", "tape"]],
+	["piano", ["piano", "keys", "keyboard"]],
+	["marimba", ["marimba"]],
+	["xylophone", ["xylophone", "xylo"]],
+	["vibraphone", ["vibraphone", "vibes", "vibra"]],
+	["glockenspiel", ["glock", "celesta"]],
+	["musicbox", ["music box", "musicbox"]],
+	["tubular", ["tubular", "chime"]],
+	["kalimba", ["kalimba"]],
+	["bell", ["bell"]],
+	["violin", ["violin", "fiddle", "viola"]],
+	["cello", ["cello"]],
+	["strings", ["string", "orch", "ensemble"]],
+	["brass", ["brass", "horns"]],
+	["horn", ["horn"]],
+	["trumpet", ["trumpet"]],
+	["trombone", ["trombone"]],
+	["tuba", ["tuba"]],
+	["sax", ["sax"]],
+	["flute", ["flute", "piccolo"]],
+	["clarinet", ["clarinet"]],
+	["oboe", ["oboe", "english horn"]],
+	["recorder", ["recorder"]],
+	["panflute", ["pan flute", "panflute", "pan pipe"]],
+	["bagpipes", ["bagpipe"]],
+	["ocarina", ["ocarina"]],
+	["choir", ["choir", "ooh", "aah", "voices"]],
+	["vocoder", ["vocoder", "talkbox"]],
+	["vocal", ["vox", "vocal", "voice", "sing", "adlib"]],
+	["pad", ["pad", "drone"]],
+	["pluck", ["pluck", "pizz"]],
+	["arp", ["arp"]],
+	["sequence", ["seq", "sequence"]],
+	["stab", ["stab", "hit"]],
+	["supersaw", ["supersaw"]],
+	["wobble", ["wobble", "wub"]],
+	["squarelead", ["square"]],
+	["lead", ["lead", "saw", "melody", "solo"]],
+	["noise", ["noise"]],
+	["riser", ["riser", "rise", "build"]],
+	["sweep", ["sweep", "whoosh"]],
+	["impact", ["impact", "boom"]],
+	["laser", ["laser", "zap"]],
+	["glitch", ["glitch", "stutter"]],
+	["reverse", ["reverse", "rev"]],
+	["ambience", ["ambient", "ambience", "atmos", "texture"]],
+	["vinyl", ["vinyl", "crackle"]],
+	["rain", ["rain", "nature", "weather"]],
+	["sfx", ["sfx", "fx", "effect"]],
+	["metronome", ["metronome", "click"]],
+	["turntable", ["turntable", "scratch"]],
+	["sampler", ["sampler", "sample", "chop"]],
+	["loop", ["loop"]],
+	["speaker", ["speaker"]],
+	["synth", ["synth", "chord"]],
+]
+
+## Every icon name, in the picker's order.
+static func names() -> Array:
+	var out := []
+	for c in IconData.CATEGORIES:
+		out.append_array(c[1])
+	return out
+
+static func label(kind: String) -> String:
+	return IconData.LABELS.get(ALIASES.get(kind, kind), kind.capitalize())
 
 ## The icon for a track: its name first (what the person called it), then
 ## the General MIDI program the file selects.
 static func guess(track_name: String, program: int) -> String:
 	var n := track_name.to_lower()
-	var tokens := n.split(" ", false)
-	for sep in ["_", "-", ".", "/", "(", ")", "[", "]", "+"]:
-		var more := []
-		for t in tokens:
-			more.append_array(t.split(sep, false))
-		tokens = PackedStringArray(more)
-	var words := {
-		"drums": ["kick", "snare", "hat", "drum", "perc", "clap", "tom", "cymbal", "808s", "rim"],
-		"bass": ["bass", "808", "sub"],
-		"piano": ["piano", "keys", "rhodes", "wurli", "organ", "clav", "epiano"],
-		"guitar": ["guitar", "gtr", "strum"],
-		"strings": ["violin", "cello", "string", "viola", "orch", "fiddle"],
-		"brass": ["brass", "trumpet", "horn", "trombone", "sax", "tuba"],
-		"winds": ["flute", "clarinet", "oboe", "wind", "bassoon", "piccolo", "recorder"],
-		"vocal": ["vox", "vocal", "voice", "choir", "sing", "adlib", "ooh", "aah"],
-		"pad": ["pad", "atmos", "ambient", "drone", "texture"],
-		"pluck": ["pluck", "harp", "kalimba", "marimba", "koto", "banjo", "pizz"],
-		"bell": ["bell", "chime", "glock", "celesta", "music box", "vibes", "xylo"],
-		"lead": ["lead", "saw", "arp", "square", "melody"],
-		"fx": ["fx", "riser", "sweep", "noise", "impact", "whoosh", "effect"],
-		"synth": ["synth", "keysynth", "chord"],
-	}
-	for kind in words:
-		for w in words[kind]:
-			# short words only at the start of a word ("hat", not "whatever")
-			if w.length() <= 4:
-				for t in tokens:
+	var tokens: Array = []
+	var word := ""
+	for ch in n:
+		if ch == " " or ch == "_" or ch == "-" or ch == "." or ch == "/" or ch == "(" or ch == ")" or ch == "[" or ch == "]" or ch == "+" or ch == "·":
+			if word != "":
+				tokens.append(word)
+			word = ""
+		else:
+			word += ch
+	if word != "":
+		tokens.append(word)
+	for entry in WORDS:
+		for w: String in entry[1]:
+			if w.length() <= 4 and not w.contains(" "):
+				for t: String in tokens:
 					if t.begins_with(w):
-						return kind
+						return entry[0]
 			elif n.contains(w):
-				return kind
-	if program >= 0:
-		var groups := [
-			"piano", "bell", "piano", "guitar", "bass", "strings", "strings",
-			"brass", "winds", "winds", "lead", "pad", "fx", "pluck", "drums", "fx",
-		]
-		var g: String = groups[clampi(program / 8, 0, 15)]
-		if program >= 52 and program <= 54:
-			return "vocal"
-		return g
+				return entry[0]
+	if program >= 0 and program < GM.size():
+		return GM[program]
 	return "generic"
 
 ## Draws [kind] in [rect] (centered, square) in [color].
 static func draw(ci: CanvasItem, kind: String, rect: Rect2, color: Color) -> void:
+	var id: String = ALIASES.get(kind, kind)
+	var shapes: Array = IconData.SHAPES.get(id, IconData.SHAPES["generic"])
 	var u := minf(rect.size.x, rect.size.y)
 	var o := rect.position + (rect.size - Vector2(u, u)) / 2.0
-	var w := maxf(1.5, u * 0.085)
-	var P := func(x: float, y: float) -> Vector2: return o + Vector2(x, y) * u
-	match kind:
-		"piano":
-			ci.draw_rect(Rect2(P.call(0.1, 0.2), Vector2(0.8, 0.6) * u), color, false, w)
-			for x in [0.26, 0.42, 0.58, 0.74]:
-				ci.draw_line(P.call(x, 0.55), P.call(x, 0.8), color, w * 0.7)
-			for x in [0.26, 0.42, 0.74]:
-				ci.draw_rect(Rect2(P.call(x - 0.045, 0.2), Vector2(0.09, 0.35) * u), color)
-		"synth":
-			var pts := PackedVector2Array()
-			for i in 25:
-				var x := i / 24.0
-				pts.append(P.call(0.1 + x * 0.8, 0.5 - 0.27 * sin(x * TAU * 1.5)))
-			ci.draw_polyline(pts, color, w, true)
-		"lead":
-			ci.draw_polyline(PackedVector2Array([
-				P.call(0.08, 0.72), P.call(0.4, 0.28), P.call(0.4, 0.72),
-				P.call(0.72, 0.28), P.call(0.72, 0.72), P.call(0.92, 0.5)]), color, w, true)
-		"bass":
-			ci.draw_colored_polygon(PackedVector2Array([
-				P.call(0.12, 0.38), P.call(0.32, 0.38), P.call(0.52, 0.2),
-				P.call(0.52, 0.8), P.call(0.32, 0.62), P.call(0.12, 0.62)]), color)
-			ci.draw_arc(P.call(0.52, 0.5), 0.2 * u, -0.9, 0.9, 12, color, w, true)
-			ci.draw_arc(P.call(0.52, 0.5), 0.34 * u, -0.9, 0.9, 14, color, w, true)
-		"guitar":
-			ci.draw_arc(P.call(0.36, 0.66), 0.22 * u, 0, TAU, 28, color, w, true)
-			ci.draw_circle(P.call(0.36, 0.66), 0.06 * u, color)
-			ci.draw_line(P.call(0.5, 0.52), P.call(0.86, 0.16), color, w * 1.3)
-			ci.draw_line(P.call(0.82, 0.2), P.call(0.92, 0.1), color, w * 1.8)
-		"pluck":
-			ci.draw_polyline(PackedVector2Array([
-				P.call(0.2, 0.15), P.call(0.2, 0.85), P.call(0.8, 0.85), P.call(0.2, 0.15)]), color, w, true)
-			for x in [0.35, 0.5, 0.65]:
-				ci.draw_line(P.call(x, 0.15 + (x - 0.2) / 0.6 * 0.7), P.call(x, 0.85), color, w * 0.55)
-		"strings":
-			ci.draw_arc(P.call(0.5, 0.64), 0.2 * u, 0, TAU, 24, color, w, true)
-			ci.draw_arc(P.call(0.5, 0.42), 0.15 * u, 0, TAU, 20, color, w, true)
-			ci.draw_line(P.call(0.5, 0.27), P.call(0.5, 0.06), color, w)
-			ci.draw_line(P.call(0.12, 0.88), P.call(0.88, 0.3), color, w * 0.7)
-		"brass":
-			ci.draw_polyline(PackedVector2Array([
-				P.call(0.55, 0.4), P.call(0.9, 0.2), P.call(0.9, 0.8), P.call(0.55, 0.6)]), color, w, true)
-			ci.draw_line(P.call(0.08, 0.5), P.call(0.55, 0.5), color, w * 1.4)
-			for x in [0.22, 0.32, 0.42]:
-				ci.draw_line(P.call(x, 0.5), P.call(x, 0.3), color, w * 0.9)
-		"winds":
-			var a: Vector2 = P.call(0.1, 0.84)
-			var b: Vector2 = P.call(0.9, 0.16)
-			var side: Vector2 = (b - a).orthogonal().normalized() * 0.065 * u
-			ci.draw_line(a + side, b + side, color, w * 0.8)
-			ci.draw_line(a - side, b - side, color, w * 0.8)
-			ci.draw_line(a + side, a - side, color, w * 0.8)
-			ci.draw_line(b + side, b - side, color, w * 0.8)
-			for t in [0.4, 0.55, 0.7]:
-				ci.draw_circle(a.lerp(b, t), 0.03 * u + 0.5, color)
-		"vocal":
-			ci.draw_arc(P.call(0.5, 0.26), 0.14 * u, PI, TAU, 12, color, w, true)
-			ci.draw_line(P.call(0.36, 0.26), P.call(0.36, 0.44), color, w)
-			ci.draw_line(P.call(0.64, 0.26), P.call(0.64, 0.44), color, w)
-			ci.draw_arc(P.call(0.5, 0.44), 0.14 * u, 0, PI, 12, color, w, true)
-			ci.draw_arc(P.call(0.5, 0.44), 0.27 * u, 0.1, PI - 0.1, 16, color, w * 0.8, true)
-			ci.draw_line(P.call(0.5, 0.71), P.call(0.5, 0.88), color, w * 0.8)
-			ci.draw_line(P.call(0.34, 0.88), P.call(0.66, 0.88), color, w)
-		"pad":
-			ci.draw_line(P.call(0.14, 0.3), P.call(0.7, 0.3), color, w * 1.5)
-			ci.draw_line(P.call(0.3, 0.5), P.call(0.86, 0.5), color, w * 1.5)
-			ci.draw_line(P.call(0.2, 0.7), P.call(0.62, 0.7), color, w * 1.5)
-		"bell":
-			var pts := PackedVector2Array([P.call(0.14, 0.74), P.call(0.26, 0.62), P.call(0.26, 0.42)])
-			for i in 13:
-				var ang := PI + PI * i / 12.0
-				pts.append(P.call(0.5, 0.42) + Vector2(cos(ang), sin(ang)) * 0.24 * u)
-			pts.append_array(PackedVector2Array([P.call(0.74, 0.62), P.call(0.86, 0.74), P.call(0.14, 0.74)]))
-			ci.draw_polyline(pts, color, w, true)
-			ci.draw_circle(P.call(0.5, 0.86), 0.06 * u, color)
-		"drums":
-			var top := PackedVector2Array()
-			var bottom := PackedVector2Array()
-			for i in 25:
-				var ang := TAU * i / 24.0
-				top.append(P.call(0.5 + 0.34 * cos(ang), 0.46 + 0.11 * sin(ang)))
-			for i in 13:
-				var ang := PI * i / 12.0
-				bottom.append(P.call(0.5 + 0.34 * cos(ang), 0.72 + 0.11 * sin(ang)))
-			ci.draw_polyline(top, color, w, true)
-			ci.draw_polyline(bottom, color, w, true)
-			ci.draw_line(P.call(0.16, 0.46), P.call(0.16, 0.72), color, w)
-			ci.draw_line(P.call(0.84, 0.46), P.call(0.84, 0.72), color, w)
-			ci.draw_line(P.call(0.22, 0.08), P.call(0.55, 0.4), color, w)
-			ci.draw_line(P.call(0.78, 0.08), P.call(0.45, 0.4), color, w)
-		"fx":
-			ci.draw_colored_polygon(PackedVector2Array([
-				P.call(0.5, 0.08), P.call(0.6, 0.4), P.call(0.92, 0.5), P.call(0.6, 0.6),
-				P.call(0.5, 0.92), P.call(0.4, 0.6), P.call(0.08, 0.5), P.call(0.4, 0.4)]), color)
-		_:
-			ci.draw_circle(P.call(0.36, 0.74), 0.15 * u, color)
-			ci.draw_line(P.call(0.5, 0.72), P.call(0.5, 0.14), color, w)
-			ci.draw_polyline(PackedVector2Array([
-				P.call(0.5, 0.14), P.call(0.68, 0.24), P.call(0.74, 0.42)]), color, w, true)
+	var w := maxf(1.3, u * 0.07)
+	for s in shapes:
+		match s[0]:
+			"l":
+				var lw: float = w * s[5]
+				var a := o + Vector2(s[1], s[2]) * u
+				var b := o + Vector2(s[3], s[4]) * u
+				ci.draw_line(a, b, color, lw, true)
+				if lw >= 2.4:
+					ci.draw_circle(a, lw / 2.0, color)
+					ci.draw_circle(b, lw / 2.0, color)
+			"p":
+				var flat: Array = s[1]
+				var pts := PackedVector2Array()
+				for i in range(0, flat.size(), 2):
+					pts.append(o + Vector2(flat[i], flat[i + 1]) * u)
+				var pw: float = w * s[2]
+				ci.draw_polyline(pts, color, pw, true)
+				if pw >= 2.4:
+					ci.draw_circle(pts[0], pw / 2.0, color)
+					ci.draw_circle(pts[pts.size() - 1], pw / 2.0, color)
+			"f":
+				var flat: Array = s[1]
+				var pts := PackedVector2Array()
+				for i in range(0, flat.size(), 2):
+					pts.append(o + Vector2(flat[i], flat[i + 1]) * u)
+				if pts.size() >= 3:
+					ci.draw_colored_polygon(pts, Color(color.r, color.g, color.b, color.a * s[2]))
+			"c":
+				ci.draw_circle(o + Vector2(s[1], s[2]) * u, s[3] * u, Color(color.r, color.g, color.b, color.a * s[4]))
+			"r":
+				var rw: float = w * s[4]
+				ci.draw_arc(o + Vector2(s[1], s[2]) * u, s[3] * u, 0.0, TAU, 32, color, rw, true)

@@ -55,18 +55,13 @@ func setup(the_app, t: Song.Track, look: Look.TrackLook, i := 0) -> void:
 	name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	name.clip_text = true
 	row.add_child(name)
-	var up := Button.new()
-	up.text = "▲"
-	up.tooltip_text = "Move this track up"
-	up.disabled = i == 0
-	up.pressed.connect(func(): app.move_track(index, -1))
-	row.add_child(up)
-	var down := Button.new()
-	down.text = "▼"
-	down.tooltip_text = "Move this track down"
-	down.disabled = i == app.song.tracks.size() - 1
-	down.pressed.connect(func(): app.move_track(index, 1))
-	row.add_child(down)
+	var more := MenuButton.new()
+	more.text = "⋯"
+	more.flat = false
+	more.tooltip_text = "Split drums into parts, add or remove tracks"
+	more.about_to_popup.connect(func(): _fill_menu(more.get_popup()))
+	more.get_popup().id_pressed.connect(_menu_chosen)
+	row.add_child(more)
 	var edit := Button.new()
 	edit.text = "Edit"
 	edit.tooltip_text = "Edit this track's notes"
@@ -115,7 +110,38 @@ func _drop_data(_at: Vector2, data: Variant) -> void:
 	app.move_track_to(data["track_row"], index)
 
 func _current_icon() -> String:
-	return tl.icon if tl.icon != "" else Icons.guess(track.name, track.program)
+	if tl.icon != "":
+		return tl.icon
+	# a part split off by pitch is named by what it is ("Snare"); a drum
+	# track's instrument number means nothing, so only its name counts
+	var g := Icons.guess(track.lane if track.lane != "" else track.name, -1 if track.drums else track.program)
+	if g == "generic" and track.drums:
+		return "drumkit"
+	return g
+
+func _fill_menu(menu: PopupMenu) -> void:
+	menu.clear()
+	if track.lane == "":
+		var many := Song.distinct_pitches(track) > 1
+		menu.add_item("Split into drum parts (kick, snare, hats…)", 0)
+		menu.add_item("Split by note", 1)
+		menu.set_item_disabled(0, not many)
+		menu.set_item_disabled(1, not many)
+	else:
+		menu.add_item("Merge the parts back into one track", 2)
+	menu.add_separator()
+	menu.add_item("Remove this track", 3)
+
+func _menu_chosen(id: int) -> void:
+	match id:
+		0:
+			app.split_track(index, true)
+		1:
+			app.split_track(index, false)
+		2:
+			app.merge_track(index)
+		3:
+			app.remove_track(index)
 
 func _open_picker() -> void:
 	if _picker:
@@ -123,26 +149,60 @@ func _open_picker() -> void:
 	_picker = PopupPanel.new()
 	add_child(_picker)
 	var holder := VBoxContainer.new()
+	holder.add_theme_constant_override("separation", 6)
 	_picker.add_child(holder)
-	var grid := GridContainer.new()
-	grid.columns = 5
-	grid.add_theme_constant_override("h_separation", 6)
-	grid.add_theme_constant_override("v_separation", 6)
-	holder.add_child(grid)
-	for k in Icons.NAMES:
-		var iv := IconView.new(40.0)
-		iv.kind = k
-		iv.tint = tl.color
-		iv.selected = k == _current_icon()
-		iv.tooltip_text = k.capitalize()
-		iv.clicked.connect(func(): _choose(k))
-		grid.add_child(iv)
+	var search := LineEdit.new()
+	search.placeholder_text = "Search icons…"
+	search.clear_button_enabled = true
+	holder.add_child(search)
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(412, 360)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	holder.add_child(scroll)
+	var list := VBoxContainer.new()
+	list.size_flags_horizontal = SIZE_EXPAND_FILL
+	list.add_theme_constant_override("separation", 4)
+	scroll.add_child(list)
 	var auto := Button.new()
-	auto.text = "Automatic"
-	auto.tooltip_text = "Pick from the track's name and instrument"
+	auto.text = "Automatic (from the track's name and instrument)"
 	auto.pressed.connect(func(): _choose(""))
 	holder.add_child(auto)
+	search.text_changed.connect(func(q): _fill_picker(list, q))
+	_fill_picker(list, "")
 	_picker.popup(Rect2i(Vector2i(_icon.get_screen_position()) + Vector2i(0, 36), Vector2i.ZERO))
+	search.grab_focus()
+
+## The icons by category, narrowed to those matching [query].
+func _fill_picker(list: VBoxContainer, query: String) -> void:
+	for c in list.get_children():
+		c.queue_free()
+	var q := query.strip_edges().to_lower()
+	var current := _current_icon()
+	for cat in IconData.CATEGORIES:
+		var shown: Array = []
+		for k in cat[1]:
+			if q == "" or Icons.label(k).to_lower().contains(q) or k.contains(q) or str(cat[0]).to_lower().contains(q):
+				shown.append(k)
+		if shown.is_empty():
+			continue
+		var title := Label.new()
+		title.text = cat[0]
+		title.add_theme_color_override("font_color", Color(1, 1, 1, 0.55))
+		title.add_theme_font_size_override("font_size", 12)
+		list.add_child(title)
+		var grid := GridContainer.new()
+		grid.columns = 8
+		grid.add_theme_constant_override("h_separation", 4)
+		grid.add_theme_constant_override("v_separation", 4)
+		list.add_child(grid)
+		for k in shown:
+			var iv := IconView.new(44.0)
+			iv.kind = k
+			iv.tint = tl.color
+			iv.selected = k == current
+			iv.tooltip_text = Icons.label(k)
+			iv.clicked.connect(func(): _choose(k))
+			grid.add_child(iv)
 
 func _choose(kind: String) -> void:
 	tl.icon = kind

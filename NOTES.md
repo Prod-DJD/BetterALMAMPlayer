@@ -71,6 +71,15 @@ by assets/branding/make_brand.py (notes scrolling past a playhead, one lit
 with the app's pulse); rerun it to change them. Track order = layering: the
 top track in the list is in front, whatever its speed.
 
+Tracks (2026-10-31): drag a track to reorder; "⋯" on a track splits it by pitch
+(drum parts: kick/snare/hats named from the GM drum map, or by note), merges
+the parts back, or removes it; "＋ Track" adds an empty one. A track on MIDI
+channel 10 is split into drum parts the first time a song is opened. Splits
+are a view of one track: edits are saved against the track's origin (its name
+in the file), so they follow the parts. Icons: ~100, authored in
+assets/branding/make_icons.py (writes scripts/core/icon_data.gd + preview
+sheets), picked from the track/part name or GM program, searchable picker.
+
 Still open: per-track note edge margins are gone with the images (not
 needed); FLAC audio; a full-screen preview window; Reaper / MusicXML
 import; add new requests here.

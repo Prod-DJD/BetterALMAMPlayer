@@ -21,6 +21,14 @@ class Track:
 	var bends: Array[Vector2] = []
 	## The longest note, for finding what's on screen quickly.
 	var longest := 0.0
+	## What this track is called in the file (or as first made): edits are
+	## saved against it, so splitting a track into parts keeps them working.
+	var origin := ""
+	## Played on MIDI channel 10, which General MIDI keeps for drums.
+	var drums := false
+	## A part split off by pitch: its label (e.g. "Snare") and its pitch.
+	var lane := ""
+	var lane_pitch := -1
 
 var path := ""
 ## Beats per minute at the start (for snapping in the editor; the timing
@@ -84,6 +92,8 @@ func _build(data) -> void:
 					n.velocity = ev.velocity
 					n.start = to_seconds.call(e.time)
 					n.end = n.start
+					if e.channel_number == 9:
+						track.drums = true
 					var key = e.channel_number * 128 + ev.note
 					if not open.has(key):
 						open[key] = []
@@ -126,7 +136,9 @@ func finish() -> void:
 	refresh()
 	_pristine.clear()
 	for tr in tracks:
-		_pristine[tr.name] = _counts(tr)
+		if tr.origin == "":
+			tr.origin = tr.name
+		_pristine[tr.origin] = _counts(tr)
 
 ## Puts the tracks in [names] order; any not named stay after, in theirs.
 func reorder(names: Array) -> void:
@@ -169,7 +181,7 @@ static func make_note(pitch: int, start: float, end: float, velocity: int) -> No
 
 # ---------------------------------------------------------------- edits
 
-## Track name → {note key → how many}, as the file had them.
+## Track origin → {note key → how many}, as the file had them.
 var _pristine := {}
 
 static func note_key(n: Note) -> String:
@@ -182,15 +194,26 @@ func _counts(tr: Track) -> Dictionary:
 		c[k] = c.get(k, 0) + 1
 	return c
 
-## What differs from the file, per track name: {"added": [[pitch, start,
+## What differs from the file, per track origin: {"added": [[pitch, start,
 ## end, velocity]…], "removed": [note key…]}. Empty if nothing was edited.
+## Parts split from one track count together, and a track that was removed
+## shows as all its notes removed.
 func edits() -> Dictionary:
-	var out := {}
+	var by_origin := {}
 	for tr in tracks:
-		var before: Dictionary = _pristine.get(tr.name, {})
+		if not by_origin.has(tr.origin):
+			by_origin[tr.origin] = []
+		by_origin[tr.origin].append_array(tr.notes)
+	var origins := by_origin.keys()
+	for o in _pristine:
+		if not by_origin.has(o):
+			origins.append(o)
+	var out := {}
+	for o in origins:
+		var before: Dictionary = _pristine.get(o, {})
 		var now := {}
 		var added := []
-		for n in tr.notes:
+		for n in by_origin.get(o, []):
 			var k := note_key(n)
 			now[k] = now.get(k, 0) + 1
 			if now[k] > before.get(k, 0):
@@ -200,13 +223,14 @@ func edits() -> Dictionary:
 			for i in before[k] - now.get(k, 0):
 				removed.append(k)
 		if not added.is_empty() or not removed.is_empty():
-			out[tr.name] = {"added": added, "removed": removed}
+			out[o] = {"added": added, "removed": removed}
 	return out
 
-## Applies [edits] (as [method edits] made them) to the notes as read.
+## Applies [edits] (as [method edits] made them) to the notes as read: call
+## before splitting tracks.
 func apply_edits(saved: Dictionary) -> void:
 	for tr in tracks:
-		var e = saved.get(tr.name)
+		var e = saved.get(tr.origin)
 		if not e is Dictionary:
 			continue
 		var gone := {}
@@ -223,6 +247,134 @@ func apply_edits(saved: Dictionary) -> void:
 		for a in e.get("added", []):
 			if a is Array and a.size() == 4:
 				tr.notes.append(make_note(int(a[0]), float(a[1]), float(a[2]), int(a[3])))
+	refresh()
+
+# ---------------------------------------------------------------- tracks
+
+const DRUM_NAMES := {
+	35: "Kick 2", 36: "Kick", 37: "Side Stick", 38: "Snare", 39: "Clap", 40: "Snare 2", 41: "Low Floor Tom",
+	42: "Closed Hat", 43: "High Floor Tom", 44: "Pedal Hat", 45: "Low Tom", 46: "Open Hat", 47: "Low-Mid Tom",
+	48: "Hi-Mid Tom", 49: "Crash", 50: "High Tom", 51: "Ride", 52: "China", 53: "Ride Bell", 54: "Tambourine",
+	55: "Splash", 56: "Cowbell", 57: "Crash 2", 58: "Vibraslap", 59: "Ride 2", 60: "Hi Bongo", 61: "Low Bongo",
+	62: "Mute Hi Conga", 63: "Open Hi Conga", 64: "Low Conga", 65: "Hi Timbale", 66: "Low Timbale", 67: "Hi Agogo",
+	68: "Low Agogo", 69: "Cabasa", 70: "Maracas", 71: "Short Whistle", 72: "Long Whistle", 73: "Short Guiro",
+	74: "Long Guiro", 75: "Claves", 76: "Hi Wood Block", 77: "Low Wood Block", 78: "Mute Cuica", 79: "Open Cuica",
+	80: "Mute Triangle", 81: "Open Triangle",
+}
+
+## "C4" for MIDI pitch 60.
+static func note_name(pitch: int) -> String:
+	return "%s%d" % [["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"][pitch % 12], pitch / 12 - 1]
+
+## The General MIDI drum part at [pitch], or its note name if there's none.
+static func drum_name(pitch: int) -> String:
+	return DRUM_NAMES.get(pitch, note_name(pitch))
+
+## How many different pitches [track] uses.
+static func distinct_pitches(track: Track) -> int:
+	var seen := {}
+	for n in track.notes:
+		seen[n.pitch] = true
+	return seen.size()
+
+## Replaces [track] with one track per pitch it uses (named by drum part when
+## [as_drums], else by note), at the same place in the list. Returns how many.
+func split_by_pitch(track: Track, as_drums: bool) -> int:
+	var at := tracks.find(track)
+	if at < 0:
+		return 0
+	var by_pitch := {}
+	for n in track.notes:
+		if not by_pitch.has(n.pitch):
+			by_pitch[n.pitch] = []
+		by_pitch[n.pitch].append(n)
+	var pitches := by_pitch.keys()
+	pitches.sort()
+	if pitches.size() < 2:
+		return 0
+	var parts: Array[Track] = []
+	for p in pitches:
+		var t := Track.new()
+		t.origin = track.origin
+		t.source = track.source
+		t.program = track.program
+		t.drums = track.drums
+		t.lane_pitch = p
+		t.lane = drum_name(p) if as_drums else note_name(p)
+		t.name = "%s · %s" % [track.name, t.lane]
+		t.notes.assign(by_pitch[p])
+		parts.append(t)
+	tracks.remove_at(at)
+	for k in parts.size():
+		tracks.insert(at + k, parts[k])
+	refresh()
+	return parts.size()
+
+## Puts the parts split from [origin] back into one track, at the first
+## part's place. Returns it (null if there were no parts).
+func merge_lanes(origin: String) -> Track:
+	var at := -1
+	var first: Track = null
+	var notes: Array[Note] = []
+	var kept: Array[Track] = []
+	for t in tracks:
+		if t.origin == origin and t.lane != "":
+			if first == null:
+				first = t
+				at = kept.size()
+			notes.append_array(t.notes)
+		else:
+			kept.append(t)
+	if first == null:
+		return null
+	var whole := Track.new()
+	whole.name = origin
+	whole.origin = origin
+	whole.source = first.source
+	whole.program = first.program
+	whole.drums = first.drums
+	whole.notes = notes
+	kept.insert(at, whole)
+	tracks = kept
+	refresh()
+	return whole
+
+## Splits each track whose origin is in [splits] (origin → "drums" or
+## "notes").
+func apply_splits(splits: Dictionary) -> void:
+	for origin in splits:
+		for tr in tracks.duplicate():
+			if tr.origin == origin and tr.lane == "":
+				split_by_pitch(tr, str(splits[origin]) == "drums")
+
+func _name_taken(name: String) -> bool:
+	if _pristine.has(name):
+		return true
+	for t in tracks:
+		if t.name == name or t.origin == name:
+			return true
+	return false
+
+## An empty track of the person's own (they add its notes in the editor).
+func add_empty_track(name := "") -> Track:
+	var t := Track.new()
+	if name == "":
+		var n := tracks.size() + 1
+		while _name_taken("Track %d" % n):
+			n += 1
+		name = "Track %d" % n
+	t.name = name
+	t.origin = name
+	tracks.append(t)
+	return t
+
+## Takes out tracks with no notes, except those whose origin is in [keep].
+func drop_empty(keep: Array) -> void:
+	var kept: Array[Track] = []
+	for t in tracks:
+		if not t.notes.is_empty() or keep.has(t.origin):
+			kept.append(t)
+	tracks = kept
 	refresh()
 
 func has_edits() -> bool:

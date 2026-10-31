@@ -397,6 +397,8 @@ func _drag(pos: Vector2) -> void:
 		delta = maxf(delta, -min_start)
 		var dp := roundi(-(pos.y - _press.y) / row_h)
 		dp = clampi(dp, -lo, 127 - hi)
+		if track() and track().lane_pitch >= 0:
+			dp = 0
 		for s in selected:
 			var og: Array = _origin[s]
 			s.start = og[0] + delta
@@ -563,6 +565,9 @@ func add_note(start: float, pitch: int) -> void:
 		return
 	_push_undo()
 	var length := snap_seconds() if snap_seconds() > 0.0 else 0.25
+	# a part split off by pitch (a kick, a snare…) only holds its own pitch
+	if tr.lane_pitch >= 0:
+		pitch = tr.lane_pitch
 	var n := Song.make_note(clampi(pitch, 0, 127), maxf(start, 0.0), maxf(start, 0.0) + length, 100)
 	tr.notes.append(n)
 	selected = [n]
@@ -572,7 +577,7 @@ func add_note(start: float, pitch: int) -> void:
 	queue_redraw()
 
 func transpose(semitones: int) -> void:
-	if selected.is_empty():
+	if selected.is_empty() or (track() and track().lane_pitch >= 0):
 		return
 	_push_undo()
 	for n in selected:

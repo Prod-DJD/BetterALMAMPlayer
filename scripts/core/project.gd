@@ -13,6 +13,12 @@ var audio := ""
 var look := Look.new()
 ## Note edits, as [method Song.edits] makes them.
 var edits := {}
+## Tracks split into parts by pitch: track origin → "drums" or "notes".
+var splits := {}
+## Empty tracks the person made (their notes are in [member edits]).
+var extra_tracks: Array = []
+## Opened for the first time (no saved project yet).
+var fresh := false
 
 static func _key(midi_path: String) -> String:
 	return "%s/%s.json" % [DIR, midi_path.md5_text()]
@@ -23,12 +29,17 @@ static func open_for(midi_path: String) -> Project:
 	var p := Project.new()
 	p.midi = midi_path
 	var f := _key(midi_path)
+	p.fresh = not FileAccess.file_exists(f)
 	if FileAccess.file_exists(f):
 		var d = JSON.parse_string(FileAccess.get_file_as_string(f))
 		if d is Dictionary:
 			p.audio = str(d.get("audio", ""))
 			if d.get("edits") is Dictionary:
 				p.edits = d["edits"]
+			if d.get("splits") is Dictionary:
+				p.splits = d["splits"]
+			if d.get("extra_tracks") is Array:
+				p.extra_tracks = d["extra_tracks"]
 			if d.get("look") is Dictionary:
 				p.look = Look.from_dict(d["look"])
 	if p.audio == "" or not FileAccess.file_exists(p.audio):
@@ -49,7 +60,7 @@ func save() -> void:
 	DirAccess.make_dir_recursive_absolute(DIR)
 	var f := FileAccess.open(_key(midi), FileAccess.WRITE)
 	if f:
-		f.store_string(JSON.stringify({"midi": midi, "audio": audio, "edits": edits, "look": look.to_dict()}, "\t"))
+		f.store_string(JSON.stringify({"midi": midi, "audio": audio, "edits": edits, "splits": splits, "extra_tracks": extra_tracks, "look": look.to_dict()}, "\t"))
 
 # ----- the app's own memory: last song, recent songs -----
 

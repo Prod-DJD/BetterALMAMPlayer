@@ -117,12 +117,13 @@ func _build() -> void:
 	var left := _panel("Tracks")
 	left.custom_minimum_size.x = 380
 	cols.add_child(left)
-	var all_row := HBoxContainer.new()
+	var all_row := HFlowContainer.new()
 	left.get_child(0).add_child(all_row)
 	all_row.add_child(_button("Rainbow", _rainbow, "Colors around the color wheel"))
 	all_row.add_child(_button("Gradient", _gradient, "Colors from the first track's to the last's"))
 	all_row.add_child(_button("Depth", _reset_depth, "Back to the default speeds (the top tracks faster)"))
 	all_row.add_child(_button("Icons", _auto_icons, "Pick every track's icon from its name and instrument again"))
+	all_row.add_child(_button("＋ Track", add_track, "Add an empty track (add its notes in the editor)"))
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -290,8 +291,18 @@ func open_song(path: String) -> void:
 	_stop()
 	song = s
 	project = Project.open_for(path)
+	for name in project.extra_tracks:
+		song.add_empty_track(str(name))
 	song.apply_edits(project.edits)
+	song.drop_empty(project.extra_tracks)
+	if project.fresh:
+		# a drum track (MIDI channel 10) is one track of many parts: split it
+		for t in song.tracks:
+			if t.drums and Song.distinct_pitches(t) > 1:
+				project.splits[t.origin] = "drums"
+	song.apply_splits(project.splits)
 	song.reorder(project.look.order)
+	_default_part_looks()
 	Project.remember(path)
 	_apply_project()
 
@@ -541,10 +552,6 @@ func _rebuild_tracks() -> void:
 		row.setup(self, tr, project.look.track_look(tr.name, i, n), i)
 		_tracks_box.add_child(row)
 
-## Moves track [i] up (-1) or down (+1) in the list.
-func move_track(i: int, step: int) -> void:
-	move_track_to(i, i + step)
-
 ## Moves track [from] to position [to] in the list, the song and the scene.
 func move_track_to(from: int, to: int) -> void:
 	if song == null or from == to or from < 0 or to < 0 or from >= song.tracks.size() or to >= song.tracks.size():
@@ -552,13 +559,97 @@ func move_track_to(from: int, to: int) -> void:
 	var t: Song.Track = song.tracks[from]
 	song.tracks.remove_at(from)
 	song.tracks.insert(to, t)
+	_tracks_changed()
+
+## The tracks list changed (order, split, merge, added, removed): remember
+## the order, redraw everything, and save now (not left to the timer, so a
+## quick reopen still sees it).
+func _tracks_changed() -> void:
 	project.look.order = []
 	for tr in song.tracks:
 		project.look.order.append(tr.name)
+	_default_part_looks()
 	_rebuild_tracks()
 	_editor.open_song(song, project.look)
 	_changed(true)
-	_save_now() # not left to the timer: an order change must survive a quick reopen
+	_save_now()
+
+## Parts split from one track start with the same speed, so a drum kit moves
+## together (but each part has its own color and icon).
+func _default_part_looks() -> void:
+	var speed := {} # origin → parallax of its first part
+	var n := song.tracks.size()
+	for i in n:
+		var t: Song.Track = song.tracks[i]
+		if t.lane == "":
+			continue
+		var fresh := not project.look.tracks.has(t.name)
+		var tl := project.look.track_look(t.name, i, n)
+		if not speed.has(t.origin):
+			speed[t.origin] = tl.parallax
+		elif fresh:
+			tl.parallax = speed[t.origin]
+
+## Splits track [i] into one track per pitch it uses: drum parts by name
+## (kick, snare, hats…) or just by note.
+func split_track(i: int, as_drums: bool) -> void:
+	if song == null or i < 0 or i >= song.tracks.size():
+		return
+	var t: Song.Track = song.tracks[i]
+	var made := song.split_by_pitch(t, as_drums)
+	if made == 0:
+		_flash("That track only has one note.")
+		return
+	project.splits[t.origin] = "drums" if as_drums else "notes"
+	_tracks_changed()
+	_flash("Split into %d tracks" % made)
+
+## Puts the parts of track [i]'s split back into one track.
+func merge_track(i: int) -> void:
+	if song == null or i < 0 or i >= song.tracks.size():
+		return
+	var origin: String = song.tracks[i].origin
+	if song.merge_lanes(origin) == null:
+		return
+	project.splits.erase(origin)
+	_tracks_changed()
+	_flash("Merged back into one track")
+
+## A new empty track at the bottom; its notes are added in the editor.
+func add_track() -> void:
+	if song == null:
+		_flash("Open a song first.")
+		return
+	var t := song.add_empty_track()
+	project.extra_tracks.append(t.origin)
+	_tracks_changed()
+	edit_track(song.tracks.size() - 1)
+
+## Removes track [i] (after asking, if it has notes).
+func remove_track(i: int) -> void:
+	if song == null or i < 0 or i >= song.tracks.size():
+		return
+	var t: Song.Track = song.tracks[i]
+	if t.notes.is_empty():
+		_remove_track(t)
+		return
+	var d := ConfirmationDialog.new()
+	d.dialog_text = "Remove \"%s\" and its %d notes?" % [t.name, t.notes.size()]
+	d.confirmed.connect(func(): _remove_track(t))
+	add_child(d)
+	d.popup_centered()
+
+func _remove_track(t: Song.Track) -> void:
+	song.tracks.erase(t)
+	song.refresh()
+	var parts_left := false
+	for o in song.tracks:
+		if o.origin == t.origin:
+			parts_left = true
+	if not parts_left:
+		project.extra_tracks.erase(t.origin)
+		project.splits.erase(t.origin)
+	_tracks_changed()
 
 func _each_track(f: Callable) -> void:
 	var n := song.tracks.size()

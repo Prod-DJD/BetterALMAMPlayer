@@ -5,7 +5,7 @@
   <a href="https://github.com/Prod-DJD/BetterALMAMPlayer/releases/download/v1.0.2/Better-ALMAMPlayer-1.0.2-Windows.zip"><img alt="Download for Windows" src="https://img.shields.io/badge/Windows-download-f7b955?style=for-the-badge&logo=windows&logoColor=black"></a>
   <a href="https://github.com/Prod-DJD/BetterALMAMPlayer/releases/download/v1.0.2/Better-ALMAMPlayer-1.0.2-Linux.tar.gz"><img alt="Download for Linux" src="https://img.shields.io/badge/Linux-download-f7b955?style=for-the-badge&logo=linux&logoColor=black"></a>
   <a href="https://github.com/Prod-DJD/BetterALMAMPlayer/releases/download/v1.0.2/Better-ALMAMPlayer-1.0.2-Android.apk"><img alt="Download for Android" src="https://img.shields.io/badge/Android-download-f7b955?style=for-the-badge&logo=android&logoColor=black"></a>
-  <a href="https://github.com/Prod-DJD/BetterALMAMPlayer/releases/download/v1.0.2/Better-ALMAMPlayer-1.0.2-iOS-jailbreak.ipa"><img alt="Download for iOS (jailbreak)" src="https://img.shields.io/badge/iOS (jailbreak)-download-8a8a8a?style=for-the-badge&logo=apple&logoColor=black"></a>
+  <a href="https://github.com/Prod-DJD/BetterALMAMPlayer/releases/download/v1.0.2/Better-ALMAMPlayer-1.0.2-iOS-jailbreak.ipa"><img alt="Download for iOS jailbreak" src="https://img.shields.io/badge/iOS-jailbreak-download-8a8a8a?style=for-the-badge&logo=apple&logoColor=black"></a>
   <a href="https://github.com/Prod-DJD/BetterALMAMPlayer/releases"><img alt="All releases" src="https://img.shields.io/badge/all%20releases-GitHub-8a8a8a?style=for-the-badge&logo=github"></a>
   <img alt="License" src="https://img.shields.io/badge/license-GPLv3-f7b955?style=for-the-badge">
 </p>

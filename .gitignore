@@ -17,3 +17,6 @@ inbox/
 # secret files: never commit
 Untitled.txt
 *token*.txt
+
+# token files (Untitled*.txt): never commit
+Untitled*.txt

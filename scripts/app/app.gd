@@ -1415,6 +1415,11 @@ func _start_render_process(out: String) -> void:
 	var args := PackedStringArray()
 	if OS.has_feature("editor"):
 		args.append_array(["--path", ProjectSettings.globalize_path("res://")])
+	if OS.get_name() == "macOS":
+		# draw with Metal, not the app's OpenGL: Apple's old OpenGL layer kept
+		# the graphics memory of every frame read back (crash reports showed
+		# the whole Mac's memory locked up), which froze the screen
+		args.append_array(["--rendering-method", "mobile", "--rendering-driver", "metal"])
 	args.append_array(["--resolution", "320x180", "--", "--render=" + project.midi, "--out=" + out,
 			"--status=" + ProjectSettings.globalize_path(RENDER_STATUS)])
 	_render_pid = OS.create_process(OS.get_executable_path(), args)
@@ -1436,6 +1441,7 @@ func _start_render_process(out: String) -> void:
 ## under 1 GB). Measured from outside by the operating system, so it counts
 ## everything, graphics memory included, and works even if that process is stuck.
 const RENDER_MAX_KB := 4_000_000
+const RENDER_MIN_FREE := 1_500_000_000
 var _render_checks := 0
 
 func _render_too_big() -> bool:
@@ -1444,14 +1450,19 @@ func _render_too_big() -> bool:
 	var out := []
 	if OS.execute("ps", ["-o", "rss=", "-p", str(_render_pid)], out) != 0 or out.is_empty():
 		return false
-	return str(out[0]).strip_edges().to_int() > RENDER_MAX_KB
+	if str(out[0]).strip_edges().to_int() > RENDER_MAX_KB:
+		return true
+	# memory held for graphics doesn't show in the process's own count: the
+	# whole Mac running out while exporting stops it too
+	var free := int(OS.get_memory_info().get("available", -1))
+	return free >= 0 and free < RENDER_MIN_FREE
 
 func _poll_render() -> void:
 	_render_checks += 1
-	if _render_pid >= 0 and _render_checks % 4 == 0 and _render_too_big():
+	if _render_pid >= 0 and _render_checks % 2 == 0 and _render_too_big():
 		OS.kill(_render_pid)
 		DirAccess.remove_absolute(_render_out)
-		_end_render(false, "The export used far more memory than a video needs, so it was stopped before it could slow down your Mac.")
+		_end_render(false, "Your Mac was running out of memory during the export, so it was stopped before it could freeze. Close some apps (Logic, Chrome) and try again.")
 		return
 	var line := FileAccess.get_file_as_string(RENDER_STATUS).strip_edges()
 	if line.begins_with("done "):

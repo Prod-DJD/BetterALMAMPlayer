@@ -10,6 +10,7 @@
 - The whole app now draws with Metal on a Mac (Vulkan or DirectX on Windows and Linux) instead of Apple's old OpenGL layer; phones are unchanged. The Mac froze even during plain playback under OpenGL.
 - Icons draw from shapes worked out once, instead of being re-split at every size (which failed on some and logged errors while playing).
 - Opening a song with a 24-bit WAV (what Logic bounces) is near instant: Godot took minutes to read those, so a 16-bit copy is made once by ffmpeg and kept.
+- Any WAV that isn't plain 16-bit (24-bit, float, or Logic's "extensible" header) is converted once to a 16-bit copy before loading; Godot's own loader used gigabytes and froze the app on those.
 - Stopping an export removes the half-made video; closing the app stops the export too.
 
 ## 1.0.7

@@ -449,30 +449,38 @@ func _load_audio(path: String) -> void:
 		player.stream = _stream
 	_rebuild_scene()
 
-## A WAV file. Godot reads 16-bit WAVs at once but takes minutes over the
-## 24-bit ones Logic bounces, so those are turned into a 16-bit copy by ffmpeg
-## first (about a second, and kept, so the next start is instant).
+## A WAV file. Godot reads 16-bit PCM WAVs at once, but it takes minutes (and
+## gigabytes) over 24-bit ones, which Logic bounces, and over the "extensible"
+## header Logic writes. So anything that isn't plain 16-bit PCM is turned into
+## a 16-bit copy by ffmpeg first, once, and kept for the next start.
 func _load_wav(path: String, bytes: PackedByteArray) -> AudioStreamWAV:
-	var bits := 16
-	var i := 12
-	while i + 8 <= bytes.size():
-		if bytes.slice(i, i + 4).get_string_from_ascii() == "fmt ":
-			bits = bytes.decode_u16(i + 22) if bytes.decode_u16(i + 8) == 1 else 0
-			break
-		i += 8 + bytes.decode_u32(i + 4) + (bytes.decode_u32(i + 4) & 1)
-	var ff := Exporter.ffmpeg_path()
-	if bits == 16 or ff == "":
+	if _wav_is_plain16(bytes):
 		return AudioStreamWAV.load_from_buffer(bytes)
+	var ff := Exporter.ffmpeg_path()
+	if ff == "":
+		return null # Godot would take minutes on it: say so instead
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("user://audio_cache"))
 	var key := ("%s|%d|%d" % [path, bytes.size(), FileAccess.get_modified_time(path)]).md5_text()
 	var copy := ProjectSettings.globalize_path("user://audio_cache/%s.wav" % key)
 	if not FileAccess.file_exists(copy):
 		OS.execute(ff, ["-y", "-loglevel", "error", "-i", path, "-vn", "-c:a", "pcm_s16le", copy])
-	if FileAccess.file_exists(copy):
-		var s := AudioStreamWAV.load_from_buffer(FileAccess.get_file_as_bytes(copy))
-		if s != null:
-			return s
-	return AudioStreamWAV.load_from_buffer(bytes)
+	if not FileAccess.file_exists(copy):
+		return null
+	return AudioStreamWAV.load_from_buffer(FileAccess.get_file_as_bytes(copy))
+
+## True for a WAV that is 16-bit integer PCM, in the plain or the extensible
+## header (where the real format sits in the sub-format's first two bytes).
+static func _wav_is_plain16(bytes: PackedByteArray) -> bool:
+	var i := 12
+	while i + 8 <= bytes.size():
+		if bytes.slice(i, i + 4).get_string_from_ascii() == "fmt ":
+			var tag := bytes.decode_u16(i + 8)
+			if tag == 0xFFFE and i + 34 <= bytes.size():
+				tag = bytes.decode_u16(i + 32)
+			return tag == 1 and bytes.decode_u16(i + 22) == 16
+		var size := bytes.decode_u32(i + 4)
+		i += 8 + size + (size & 1)
+	return false
 
 func _length() -> float:
 	var l := song.length if song else 0.0

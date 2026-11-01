@@ -7,6 +7,8 @@ extends VBoxContainer
 signal edited
 signal export_requested
 signal revert_requested
+## Move the selected notes to another track: its index, or -1 for a new one.
+signal send_requested(target: int)
 
 var app
 var canvas: NoteCanvas
@@ -17,6 +19,7 @@ var _redo_btn: Button
 var _delete_btn: Button
 var _vel: SpinBox
 var _info: Label
+var _send: MenuButton
 
 const SNAPS := [["Off", 0.0], ["1 beat", 1.0], ["1/2", 0.5], ["1/4", 0.25], ["1/8", 0.125], ["1/16", 0.0625]]
 
@@ -45,6 +48,19 @@ func setup(the_app) -> void:
 	_undo_btn = _button(bar, "Undo", "⌘Z", func(): canvas.undo())
 	_redo_btn = _button(bar, "Redo", "⇧⌘Z", func(): canvas.redo())
 	_delete_btn = _button(bar, "Delete", "Delete the selected notes (Delete key; or right-click a note)", func(): canvas.delete_selected())
+	_send = MenuButton.new()
+	_send.text = "Send to ▾"
+	_send.flat = false
+	_send.tooltip_text = "Move the selected notes to another track (or a new one): pull hi-hats out of a drum track, say"
+	_send.about_to_popup.connect(_fill_send)
+	_send.get_popup().id_pressed.connect(func(id): send_requested.emit(id - 1))
+	bar.add_child(_send)
+	var others := CheckBox.new()
+	others.text = "Other tracks"
+	others.button_pressed = true
+	others.tooltip_text = "Show the other tracks' notes as faint outlines behind this one"
+	others.toggled.connect(func(on): canvas.show_others = on; canvas.queue_redraw())
+	bar.add_child(others)
 	_vel = SpinBox.new()
 	_vel.min_value = 1
 	_vel.max_value = 127
@@ -85,18 +101,36 @@ func _button(bar: Control, text: String, tip: String, on: Callable) -> Button:
 	return b
 
 ## The song to edit (null: nothing).
-func open_song(song: Song, look: Look) -> void:
+func open_song(song: Song, look: Look, keep_history := false) -> void:
 	canvas.song = song
 	canvas.look = look
-	canvas.clear_history()
+	if not keep_history:
+		canvas.clear_history()
 	_track_pick.clear()
 	if song:
 		for t in song.tracks:
 			_track_pick.add_item(t.name)
 	var i := clampi(canvas.track_index, 0, maxi((song.tracks.size() if song else 1) - 1, 0))
 	_track_pick.selected = i
-	canvas.set_track(i)
+	if keep_history and i == canvas.track_index and canvas.track() != null:
+		# the same track after a change: leave the view where it was
+		canvas.selected.clear()
+		canvas.selection_changed.emit()
+		canvas.queue_redraw()
+	else:
+		canvas.set_track(i)
 	_sync()
+
+func _fill_send() -> void:
+	var menu := _send.get_popup()
+	menu.clear()
+	menu.add_item("A new track", 0)
+	menu.set_item_disabled(0, canvas.selected.is_empty())
+	menu.add_separator()
+	if canvas.song:
+		for i in canvas.song.tracks.size():
+			menu.add_item(canvas.song.tracks[i].name, i + 1)
+			menu.set_item_disabled(menu.get_item_count() - 1, i == canvas.track_index or canvas.selected.is_empty())
 
 func show_track(i: int) -> void:
 	if canvas.song == null or i < 0 or i >= canvas.song.tracks.size():

@@ -292,6 +292,68 @@ func _initialize() -> void:
 	tl0.icon = "kick"
 	check(app.vis._icon_of(tr0, tl0) == "kick", "a newly chosen icon shows at once (no stale cache)")
 	check(Look.new().icon_size > 1.0 and Look.from_dict({"icon_size": 99}).icon_size <= 6.0, "icon size: bigger by default, kept in range")
+	# ---- replacing a track from a dropped MIDI: where its notes land
+	var old_notes: Array = [Song.make_note(60, 10.5, 11.0, 100), Song.make_note(62, 12.0, 12.5, 100)] # bar 6 at 120 bpm (2 s a bar)
+	var trimmed: Array = [Song.make_note(60, 0.5, 1.0, 90), Song.make_note(62, 2.0, 2.5, 90)] # the clip starts at the song start
+	var kept_space: Array = [Song.make_note(60, 10.5, 11.0, 90)] # the empty bars were kept
+	check(TrackReplace.bar_of(10.5, 120.0) == 5 and TrackReplace.bar_of(1.99, 120.0) == 0 and TrackReplace.bar_of(2.0, 120.0) == 1, "bars count from 0, four beats each")
+	check(TrackReplace.default_align(old_notes, trimmed, 120.0, 120.0), "a clip trimmed to the start offers the old bar first")
+	check(not TrackReplace.default_align(old_notes, kept_space, 120.0, 120.0), "a clip that kept its empty bars is already in place")
+	var placed := TrackReplace.plan(old_notes, trimmed, 120.0, 120.0, true, true)
+	check(is_equal_approx(placed[0].start, 10.5) and is_equal_approx(placed[1].start, 12.0), "aligned to the old bar, same place within the bar")
+	check(is_equal_approx(TrackReplace.plan(old_notes, trimmed, 120.0, 120.0, false, true)[0].start, 0.5), "not aligned: the file's own timing")
+	check(is_equal_approx(TrackReplace.plan(old_notes, kept_space, 120.0, 120.0, true, true)[0].start, 10.5), "aligning a clip already in the right bar changes nothing")
+	var slow: Array = [Song.make_note(60, 4.0, 5.0, 100)] # 4 s at 60 bpm = 4 beats
+	check(is_equal_approx(TrackReplace.plan([], slow, 120.0, 60.0, false, true)[0].start, 2.0) and is_equal_approx(TrackReplace.plan([], slow, 120.0, 60.0, false, false)[0].start, 4.0), "tempo matching scales the times to the song")
+	# ---- the editor: parts of a drum kit move up and down, notes go to other tracks, replace is one undo step
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(Project._key(demo)))
+	app.open_song(demo)
+	await process_frame
+	app.split_track(0, false)
+	var total_before := 0
+	for t in app.song.tracks: total_before += t.notes.size()
+	app.edit_track(0)
+	var cv3: NoteCanvas = app._editor.canvas
+	var lane0: Song.Track = cv3.track()
+	var lane_count_before: int = app.song.tracks.size()
+	cv3.selected = [lane0.notes[0]]
+	cv3.transpose(1) # one semitone up: it belongs to another part now
+	var in_place := true
+	var total_after := 0
+	for t in app.song.tracks:
+		total_after += t.notes.size()
+		if t.lane != "":
+			for n in t.notes:
+				if n.pitch != t.lane_pitch: in_place = false
+	check(in_place and total_after == total_before, "a note moved up in a drum part joins the right part (%d notes kept)" % total_after)
+	# send selection to a new track
+	var src_idx: int = app._editor.canvas.track_index
+	var src_track: Song.Track = app.song.tracks[src_idx]
+	app._editor.canvas.selected.assign([src_track.notes[0]])
+	var before_src := src_track.notes.size()
+	var tracks_before: int = app.song.tracks.size()
+	app.move_selection_to(-1)
+	check(app.song.tracks.size() == tracks_before + 1 and app.song.tracks.back().notes.size() == 1, "send to a new track makes it")
+	var src_after: Song.Track = null
+	for t in app.song.tracks:
+		if t.name == src_track.name: src_after = t
+	check(src_after != null and src_after.notes.size() == before_src - 1, "...and takes the note from the first track")
+	app._editor.canvas.undo()
+	var back := 0
+	for t in app.song.tracks: back += t.notes.size()
+	check(back == total_before, "one undo puts the note back where it was")
+	# replace the notes of the track being edited
+	var rep: Array[Song.Note] = [Song.make_note(60, 1.0, 1.5, 100), Song.make_note(64, 2.0, 2.5, 100)]
+	for ti in app.song.tracks.size():
+		if app.song.tracks[ti].lane == "" and app.song.tracks[ti].notes.size() > 2:
+			app._editor.show_track(ti)
+			break
+	var edited_track: Song.Track = app._editor.canvas.track()
+	var edited_count := edited_track.notes.size()
+	app._editor.canvas.replace_notes(rep)
+	check(app._editor.canvas.track().notes.size() == 2, "replace swaps the whole track's notes")
+	app._editor.canvas.undo()
+	check(app._editor.canvas.track().notes.size() == edited_count, "...and one undo brings the old ones back")
 	# ---- full screen preview
 	app.set_fullscreen_preview(true)
 	check(not app._left.visible and not app._right.visible and not app._top.visible and not app._transport.visible and app._frame.visible, "full screen: only the video is left")

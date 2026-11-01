@@ -220,7 +220,8 @@ func _build() -> void:
 	_editor = NoteEditor.new()
 	_editor.size_flags_vertical = SIZE_EXPAND_FILL
 	_editor.setup(self)
-	_editor.edited.connect(func(): _changed())
+	_editor.edited.connect(_on_editor_edited)
+	_editor.send_requested.connect(move_selection_to)
 	_editor.export_requested.connect(_save_midi_dialog)
 	_editor.revert_requested.connect(_revert_edits)
 	_editor.visible = false
@@ -616,6 +617,12 @@ func _pick_image(then: Callable) -> void:
 	d.popup_centered()
 
 func _on_files_dropped(files: PackedStringArray) -> void:
+	# a song dropped on the note editor replaces the track being edited
+	if _editor.visible and song != null and _editor.get_global_rect().has_point(get_global_mouse_position()):
+		for f in files:
+			if Importer.is_song_file(f):
+				_ask_replace_track(f)
+				return
 	# the song first, so sound and pictures dropped with it land on it
 	var sorted := Array(files)
 	sorted.sort_custom(func(a, b): return _is_midi(a) and not _is_midi(b))
@@ -678,15 +685,71 @@ func move_track_to(from: int, to: int) -> void:
 ## The tracks list changed (order, split, merge, added, removed): remember
 ## the order, redraw everything, and save now (not left to the timer, so a
 ## quick reopen still sees it).
-func _tracks_changed() -> void:
+func _tracks_changed(keep_history := false) -> void:
+	# the track being edited stays the one being edited (by name)
+	var editing := ""
+	if _editor.canvas.track():
+		editing = _editor.canvas.track().name
 	project.look.order = []
 	for tr in song.tracks:
 		project.look.order.append(tr.name)
 	_default_part_looks()
 	_rebuild_tracks()
-	_editor.open_song(song, project.look)
+	for i in song.tracks.size():
+		if song.tracks[i].name == editing:
+			_editor.canvas.track_index = i
+	_editor.open_song(song, project.look, keep_history)
 	_changed(true)
 	_save_now()
+
+## After an edit in the editor: notes moved up or down in a part of a drum kit
+## belong to another part now, so the parts are made again from the notes.
+func _on_editor_edited() -> void:
+	var resplit := []
+	for t in song.tracks:
+		if t.lane != "" and not resplit.has(t.origin):
+			for n in t.notes:
+				if n.pitch != t.lane_pitch:
+					resplit.append(t.origin)
+					break
+	if not resplit.is_empty():
+		for origin in resplit:
+			var as_drums := str(project.splits.get(origin, "drums")) == "drums"
+			var whole := song.merge_lanes(origin)
+			if whole != null:
+				song.split_by_pitch(whole, as_drums)
+		_tracks_changed(true)
+		return
+	_changed()
+
+## Moves the notes selected in the editor to track [param target] (its index),
+## or to a new track (-1).
+func move_selection_to(target: int) -> void:
+	var cv := _editor.canvas
+	var src := cv.track()
+	if song == null or src == null or cv.selected.is_empty():
+		return
+	var notes: Array = cv.selected.duplicate()
+	var dest: Song.Track
+	if target < 0:
+		dest = song.add_empty_track()
+		project.extra_tracks.append(dest.origin)
+	elif target < song.tracks.size() and song.tracks[target] != src:
+		dest = song.tracks[target]
+	else:
+		return
+	cv.push_multi_undo([song.tracks.find(src), song.tracks.find(dest)])
+	var kept: Array[Song.Note] = []
+	for n in src.notes:
+		if not notes.has(n):
+			kept.append(n)
+	src.notes = kept
+	for n in notes:
+		dest.notes.append(n)
+	cv.selected.clear()
+	song.refresh()
+	_tracks_changed(true)
+	_flash("Moved %d notes to %s" % [notes.size(), dest.name])
 
 ## Parts split from one track start with the same speed, so a drum kit moves
 ## together (but each part has its own color and icon).
@@ -1106,6 +1169,95 @@ func _save_look_dialog() -> void:
 	add_child(d)
 	d.popup_centered(Vector2i(360, 100))
 	e.grab_focus()
+
+# ---------------------------------------------------------------- replace a track
+
+## A MIDI (or project) dropped on the note editor: ask which of its tracks to
+## take and where to place it, then replace the notes of the track being
+## edited with them.
+func _ask_replace_track(path: String) -> void:
+	var cv := _editor.canvas
+	var target := cv.track()
+	var incoming := Importer.load_song(path)
+	if target == null or incoming == null:
+		_flash(Importer.last_error if incoming == null else "Pick a track to replace first.")
+		return
+	var d := ConfirmationDialog.new()
+	d.title = "Replace the notes of \"%s\"" % target.name
+	d.ok_button_text = "Replace"
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	box.custom_minimum_size.x = 420
+	d.add_child(box)
+	var head := Label.new()
+	head.text = "with the notes from %s" % path.get_file()
+	box.add_child(head)
+	var which := OptionButton.new()
+	for t in incoming.tracks:
+		which.add_item("%s (%d notes)" % [t.name, t.notes.size()])
+	# the file's track with the same name, else the one with the most notes
+	var pick := 0
+	for i in incoming.tracks.size():
+		if incoming.tracks[i].name.to_lower() == target.name.to_lower():
+			pick = i
+			break
+		if incoming.tracks[i].notes.size() > incoming.tracks[pick].notes.size():
+			pick = i
+	which.select(pick)
+	if incoming.tracks.size() > 1:
+		var l := Label.new()
+		l.text = "Take this track from the file:"
+		box.add_child(l)
+		box.add_child(which)
+	var place := OptionButton.new()
+	place.add_item("Where the file puts them", 0)
+	place.add_item("In the bar this track's notes started in", 1)
+	var match_tempo := CheckBox.new()
+	match_tempo.button_pressed = true
+	match_tempo.visible = absf(incoming.bpm - song.bpm) > 0.5
+	match_tempo.text = "Match the song's tempo (%.0f BPM in the file, %.0f in the song)" % [incoming.bpm, song.bpm]
+	var info := Label.new()
+	info.add_theme_color_override("font_color", TEXT_DIM)
+	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	info.custom_minimum_size.x = 400
+	var refresh := func():
+		var src: Song.Track = incoming.tracks[which.selected]
+		var scale: float = incoming.bpm / song.bpm if match_tempo.button_pressed else 1.0
+		if target.notes.is_empty() or src.notes.is_empty():
+			info.text = "The track has no notes now, so the file's timing is used."
+			place.disabled = true
+			return
+		place.disabled = false
+		var new_first := INF
+		for n in src.notes:
+			new_first = minf(new_first, n.start)
+		var old_first := INF
+		for n in target.notes:
+			old_first = minf(old_first, n.start)
+		info.text = "The file's first note is in bar %d; this track's first note was in bar %d." % [
+				TrackReplace.bar_of(new_first * scale, song.bpm) + 1, TrackReplace.bar_of(old_first, song.bpm) + 1]
+	var first_src: Song.Track = incoming.tracks[pick]
+	if TrackReplace.default_align(target.notes, first_src.notes, song.bpm, incoming.bpm):
+		place.select(1)
+	var pl := Label.new()
+	pl.text = "Place the notes:"
+	box.add_child(pl)
+	box.add_child(place)
+	box.add_child(match_tempo)
+	box.add_child(info)
+	refresh.call()
+	which.item_selected.connect(func(_i): refresh.call())
+	match_tempo.toggled.connect(func(_on): refresh.call())
+	d.confirmed.connect(func():
+		var src: Song.Track = incoming.tracks[which.selected]
+		var notes := TrackReplace.plan(target.notes, src.notes, song.bpm, incoming.bpm,
+				place.selected == 1 and not place.disabled, match_tempo.button_pressed)
+		cv.replace_notes(notes)
+		_flash("Replaced with %d notes from %s" % [notes.size(), path.get_file()])
+		d.queue_free())
+	d.canceled.connect(func(): d.queue_free())
+	add_child(d)
+	d.popup_centered()
 
 # ---------------------------------------------------------------- full screen
 

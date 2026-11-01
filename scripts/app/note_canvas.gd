@@ -34,6 +34,8 @@ var row_h := 16.0
 var top_pitch := 90.0
 ## Grid and snap, in beats (0: no snapping).
 var snap_beats := 0.25
+## Show the other tracks' notes behind the one being edited.
+var show_others := true
 var selected: Array[Song.Note] = []
 
 var _undo: Array = []
@@ -156,19 +158,23 @@ func _draw() -> void:
 			for q in range(1, 4):
 				var qx := x + px_beat * q / 4.0
 				draw_line(Vector2(qx, RULER_H), Vector2(qx, size.y), Color(1, 1, 1, 0.035))
-	# the other tracks, dim
+	# the other tracks: faint outlines with a hint of fill, never solid, so
+	# notes stacked on top of each other (several tracks playing the same
+	# thing) can't pile up into something that looks like a note you can pick
 	var count := song.tracks.size()
 	for i in count:
-		if i == track_index:
+		if i == track_index or not show_others:
 			continue
 		var tr: Song.Track = song.tracks[i]
 		var col: Color = look.track_look(tr.name, i, count).color
-		col.a = 0.2
+		var edge := Color(col.r, col.g, col.b, 0.55)
+		var wash := Color(col.r, col.g, col.b, 0.05)
 		for n in tr.notes:
 			var r := _note_rect(n)
 			if r.end.x < KEYS_W or r.position.x > size.x:
 				continue
-			draw_rect(r, col)
+			draw_rect(r, wash)
+			draw_rect(r, edge, false, 1.0)
 	# the active track
 	var active := track()
 	if active:
@@ -397,8 +403,6 @@ func _drag(pos: Vector2) -> void:
 		delta = maxf(delta, -min_start)
 		var dp := roundi(-(pos.y - _press.y) / row_h)
 		dp = clampi(dp, -lo, 127 - hi)
-		if track() and track().lane_pitch >= 0:
-			dp = 0
 		for s in selected:
 			var og: Array = _origin[s]
 			s.start = og[0] + delta
@@ -508,19 +512,60 @@ func _push_pending_undo() -> void:
 	_redo.clear()
 	_pending_undo = {}
 
-func _restore(entry: Dictionary) -> Dictionary:
-	var tr: Song.Track = song.tracks[entry["track"]]
-	var now := {"track": entry["track"], "notes": _dump(tr)}
+## Puts one track's notes back as the entry saved them; returns what they
+## were just before (for redo).
+func _restore_one(entry: Dictionary) -> Dictionary:
+	var idx: int = entry["track"]
+	if idx < 0 or idx >= song.tracks.size():
+		return {"track": idx, "notes": []}
+	var tr: Song.Track = song.tracks[idx]
+	var now := {"track": idx, "notes": _dump(tr)}
 	var notes: Array[Song.Note] = []
 	for d in entry["notes"]:
 		notes.append(Song.make_note(d[0], d[1], d[2], d[3], d[4] if d.size() > 4 else -1))
 	tr.notes = notes
+	return now
+
+func _restore(entry: Dictionary) -> Dictionary:
+	var now := {}
+	if entry.has("multi"): # notes moved between tracks: every track involved goes back
+		now = {"multi": []}
+		for e in entry["multi"]:
+			now["multi"].append(_restore_one(e))
+	else:
+		now = _restore_one(entry)
 	selected.clear()
 	song.refresh()
 	selection_changed.emit()
 	edited.emit()
 	queue_redraw()
 	return now
+
+## Saves the notes of several tracks as one undo step (for moving notes
+## from one track to another).
+func push_multi_undo(indices: Array) -> void:
+	var entries := []
+	for i in indices:
+		if i >= 0 and i < song.tracks.size():
+			entries.append({"track": i, "notes": _dump(song.tracks[i])})
+	_undo.append({"multi": entries})
+	if _undo.size() > 200:
+		_undo.pop_front()
+	_redo.clear()
+
+## Replaces every note of the track being edited with [param new_notes] (one
+## undo step).
+func replace_notes(new_notes: Array[Song.Note]) -> void:
+	var tr := track()
+	if tr == null:
+		return
+	_push_undo()
+	tr.notes = new_notes
+	selected.clear()
+	song.refresh()
+	selection_changed.emit()
+	edited.emit()
+	queue_redraw()
 
 func undo() -> void:
 	if _undo.is_empty():
@@ -565,7 +610,7 @@ func add_note(start: float, pitch: int) -> void:
 		return
 	_push_undo()
 	var length := snap_seconds() if snap_seconds() > 0.0 else 0.25
-	# a part split off by pitch (a kick, a snare…) only holds its own pitch
+	# a note added to a part of a drum kit starts on that part's pitch
 	if tr.lane_pitch >= 0:
 		pitch = tr.lane_pitch
 	var n := Song.make_note(clampi(pitch, 0, 127), maxf(start, 0.0), maxf(start, 0.0) + length, 100)
@@ -577,7 +622,7 @@ func add_note(start: float, pitch: int) -> void:
 	queue_redraw()
 
 func transpose(semitones: int) -> void:
-	if selected.is_empty() or (track() and track().lane_pitch >= 0):
+	if selected.is_empty():
 		return
 	_push_undo()
 	for n in selected:

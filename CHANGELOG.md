@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.5
+
+- **Fixed: exporting could restart the Mac.** 1.0.4 drove the graphics chip flat out during an export (the screen's frame-rate cap was switched off and extra frames were forced), which could hang the graphics driver partway through and make macOS restart. Exports now keep the normal frame-rate cap and draw each frame once, as part of the app's own frames. They only force a frame when the window is minimized. Every frame is still checked to be drawn for its own moment, so the export stays smooth.
+- The video encoder now uses half of the processor's cores, so the Mac stays responsive during an export. WebM (VP9) exports use a faster encoder setting.
+
 ## 1.0.4
 
 - **Smooth export to the end.** Exports could still stutter partway through (from about 30 seconds into a test song), because macOS slowed the app's frames when its window was in the background, and the export then reused old pictures. Each frame is now checked to be drawn for its own moment before it's saved, and the app is kept from napping during an export.

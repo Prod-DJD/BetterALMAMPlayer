@@ -69,20 +69,39 @@ static func library_dir_in(line: String) -> String:
 	return line.substr(start, at - start).rstrip("/")
 
 ## Draws the picture for time [param t] (already set on [param v]) and gives
-## it back. The visualizer's drawing for a new time only happens during one of
-## the app's frames, so this lets frames pass until the picture has really
-## been drawn for [param t], then renders it, whether or not the window is
-## showing (macOS slows or stops a hidden window's frames; drawing straight
-## away then would save the old picture again, which looked like stutter).
+## it back, riding on the app's own frames: one normal frame records the
+## picture for [param t] and renders it, at the screen's own pace (so the GPU
+## is never driven flat out; doing that could hang the graphics driver and
+## restart the Mac). Only when the window is minimized, and no frames are
+## drawn, does it draw the frame itself.
 func _render(vp: SubViewport, v: Visualizer, t: float) -> Image:
 	vp.render_target_update_mode = SubViewport.UPDATE_ONCE
-	for attempt in 8:
-		await get_tree().process_frame
-		if v.drawn_time == t:
-			break
+	if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_MINIMIZED:
+		# no frames are drawn: one frame records the picture, then draw it
+		for attempt in 8:
+			await get_tree().process_frame
+			if v.drawn_time == t:
+				break
+		RenderingServer.force_draw(false)
+	else:
+		var drawn := [false]
+		var mark := func(): drawn[0] = true
+		RenderingServer.frame_post_draw.connect(mark)
+		var t0 := Time.get_ticks_msec()
+		# wait for a frame that drew this picture and rendered it
+		while not (drawn[0] and v.drawn_time == t and vp.render_target_update_mode == SubViewport.UPDATE_DISABLED):
+			if Time.get_ticks_msec() - t0 > 2000:
+				break # nothing is drawing after all: draw it below
+			await get_tree().process_frame
+		RenderingServer.frame_post_draw.disconnect(mark)
+		if v.drawn_time != t or vp.render_target_update_mode != SubViewport.UPDATE_DISABLED:
+			for attempt in 8:
+				if v.drawn_time == t:
+					break
+				await get_tree().process_frame
+			RenderingServer.force_draw(false)
 	if v.drawn_time != t:
 		stale += 1
-	RenderingServer.force_draw(false)
 	var img := vp.get_texture().get_image()
 	if img != null and img.get_format() != Image.FORMAT_RGBA8:
 		img.convert(Image.FORMAT_RGBA8)
@@ -94,6 +113,11 @@ func cancel() -> void:
 ## Megabits per second for HEVC at a frame height (a sensible fixed rate).
 static func _mbps(height: int) -> int:
 	return 40 if height >= 2160 else (20 if height >= 1440 else 12)
+
+## Encoder threads: half the processor's cores (at least 2), so an export
+## leaves the Mac room to breathe.
+static func _encoder_threads() -> int:
+	return maxi(2, OS.get_processor_count() / 2)
 
 static func wants_alpha(out: String) -> bool:
 	var low := out.to_lower()
@@ -176,7 +200,8 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 			"vp9":
 				# alpha needs auto-alt-ref off; CRF with no bitrate cap
 				args.append_array(["-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-b:v", "0",
-						"-crf", "28", "-auto-alt-ref", "0", "-row-mt", "1"])
+						"-crf", "28", "-auto-alt-ref", "0", "-row-mt", "1",
+						"-deadline", "good", "-cpu-used", "4"])
 			_:
 				# ProRes 4444 with alpha: Final Cut, Premiere, Resolve and After Effects read it
 				args.append_array(["-c:v", "prores_ks", "-profile:v", "4444", "-pix_fmt", "yuva444p10le",
@@ -184,7 +209,7 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 	else:
 		args.append_array(["-c:v", "libx264", "-preset", "medium", "-crf", "16", "-pix_fmt", "yuv420p",
 				"-movflags", "+faststart"])
-	args.append_array(["-t", "%.3f" % (end - start), out])
+	args.append_array(["-threads", str(_encoder_threads()), "-t", "%.3f" % (end - start), out])
 	var proc := OS.execute_with_pipe(ff, args)
 	if proc.is_empty():
 		running = false
@@ -194,9 +219,6 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 	var pipe: FileAccess = proc["stdio"]
 	var pid: int = proc["pid"]
 	var ok := true
-	# frames come as fast as they can be drawn, not as fast as the screen refreshes
-	var prev_vsync := DisplayServer.window_get_vsync_mode()
-	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	var prev_hash := 0
 	var prev_busy := false
 	var redrawn := 0
@@ -231,7 +253,6 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 		pipe.store_buffer(img.get_data())
 		if i % 10 == 0:
 			progress.emit(float(i) / frames)
-	DisplayServer.window_set_vsync_mode(prev_vsync)
 	if redrawn > 0 or stale > 0:
 		print("export: %d of %d frames drawn again, %d not confirmed" % [redrawn, frames, stale])
 	pipe.close()

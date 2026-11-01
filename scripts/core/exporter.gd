@@ -31,6 +31,12 @@ static func ffmpeg_path() -> String:
 		"/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg",
 		"C:/ffmpeg/bin/ffmpeg.exe", "C:/Program Files/ffmpeg/bin/ffmpeg.exe",
 	]
+	if OS.get_name() == "Android":
+		# an app may only run programs from its native library folder, so the
+		# APK carries ffmpeg there as libffmpeg.so (the way YTDLnis does)
+		var lib := android_library_dir()
+		if lib != "":
+			candidates.push_front(lib.path_join("libffmpeg.so"))
 	var sep := ";" if OS.get_name() == "Windows" else ":"
 	for dir in OS.get_environment("PATH").split(sep, false):
 		candidates.append(dir.path_join(name))
@@ -38,6 +44,27 @@ static func ffmpeg_path() -> String:
 		if FileAccess.file_exists(p):
 			return p
 	return ""
+
+## The folder Android unpacked this app's native libraries into: where
+## libgodot_android.so was loaded from (read from the process's memory map).
+static func android_library_dir() -> String:
+	var f := FileAccess.open("/proc/self/maps", FileAccess.READ)
+	if f == null:
+		return ""
+	while not f.eof_reached():
+		var dir := library_dir_in(f.get_line())
+		if dir != "":
+			return dir
+	return ""
+
+## The folder in a line of /proc/self/maps that maps libgodot_android.so ("" if
+## the line is about something else).
+static func library_dir_in(line: String) -> String:
+	var at := line.find("libgodot_android.so")
+	if at < 0:
+		return ""
+	var start := line.rfind(" ", at) + 1
+	return line.substr(start, at - start).rstrip("/")
 
 func cancel() -> void:
 	_cancel = true
@@ -72,7 +99,10 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 		return
 	var ff := ffmpeg_path()
 	if ff == "":
-		finished.emit(false, "ffmpeg isn't there, so it can't make a video.")
+		if OS.get_name() == "iOS":
+			finished.emit(false, "iPhones and iPads can't run ffmpeg, so they can't export video. Screen-record the preview instead.")
+		else:
+			finished.emit(false, "ffmpeg isn't there, so it can't make a video.")
 		return
 	running = true
 	_cancel = false

@@ -1354,11 +1354,20 @@ func _export_dialog() -> void:
 	if _exporter.running:
 		_exporter.cancel()
 		return
+	var ext := Exporter.extension_for(project.look.export_format)
+	if OS.get_name() == "Android":
+		# no save dialog: the video goes in Movies/Better ALMAMPlayer
+		var dir := OS.get_system_dir(OS.SYSTEM_DIR_MOVIES)
+		if dir == "":
+			dir = OS.get_user_data_dir()
+		dir = dir.path_join("Better ALMAMPlayer")
+		DirAccess.make_dir_recursive_absolute(dir)
+		_start_export(dir.path_join(_title.text + "." + ext))
+		return
 	var d := FileDialog.new()
 	d.use_native_dialog = true
 	d.file_mode = FileDialog.FILE_MODE_SAVE_FILE
 	d.access = FileDialog.ACCESS_FILESYSTEM
-	var ext := Exporter.extension_for(project.look.export_format)
 	var names := {"mp4": "MP4 video", "mov": "QuickTime video, transparent background", "webm": "WebM video, transparent background"}
 	d.filters = PackedStringArray(["*.%s ; %s" % [ext, names[ext]]])
 	d.current_file = _title.text + "." + ext
@@ -1367,14 +1376,36 @@ func _export_dialog() -> void:
 		var low: String = p.to_lower()
 		if not (low.ends_with(".mov") or low.ends_with(".mp4") or low.ends_with(".webm")):
 			p += "." + ext
-		_stop()
-		_export_bar.value = 0
-		_export_bar.visible = true
-		_export_btn.text = "Stop exporting"
-		_status.text = "Exporting…"
-		_exporter.run(song, project.look, project.audio, p, project.look.export_fps, _stream.get_length() if _stream else 0.0))
+		_start_export(p))
 	add_child(d)
 	d.popup_centered()
+
+func _start_export(p: String) -> void:
+	_stop()
+	_export_bar.value = 0
+	_export_bar.visible = true
+	_export_btn.text = "Stop exporting"
+	_status.text = "Exporting…"
+	_exporter.run(song, project.look, _export_audio_path(), p, project.look.export_fps, _stream.get_length() if _stream else 0.0)
+
+## The sound file as ffmpeg can read it. On Android a picked file may be a
+## content address ffmpeg can't open: it is copied into the app's own folder.
+func _export_audio_path() -> String:
+	var path := project.audio
+	if path == "" or OS.get_name() != "Android":
+		return path
+	if path.begins_with("/") and FileAccess.file_exists(path):
+		return path
+	var src := FileAccess.open(path, FileAccess.READ)
+	if src == null:
+		return ""
+	var copy := "user://export_audio." + path.get_extension()
+	var dst := FileAccess.open(copy, FileAccess.WRITE)
+	if dst == null:
+		return ""
+	dst.store_buffer(src.get_buffer(src.get_length()))
+	dst.close()
+	return ProjectSettings.globalize_path(copy)
 
 func _render_and_quit(midi: String, out: String) -> void:
 	open_song(midi)

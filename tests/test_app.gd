@@ -354,6 +354,9 @@ func _initialize() -> void:
 	check(app._editor.canvas.track().notes.size() == 2, "replace swaps the whole track's notes")
 	app._editor.canvas.undo()
 	check(app._editor.canvas.track().notes.size() == edited_count, "...and one undo brings the old ones back")
+	# ---- Android: where the bundled ffmpeg lives
+	check(Exporter.library_dir_in("7b6c000000-7b6c3d0000 r-xp 00000000 fd:0b 1234 /data/app/~~abc==/com.beatprod.betteralmamplayer-xyz==/lib/arm64/libgodot_android.so") == "/data/app/~~abc==/com.beatprod.betteralmamplayer-xyz==/lib/arm64", "finds the native library folder in a maps line")
+	check(Exporter.library_dir_in("7b6c000000-7b6c3d0000 r-xp 00000000 fd:0b 1234 /system/lib64/libc.so") == "", "ignores other lines")
 	# ---- full screen preview
 	app.set_fullscreen_preview(true)
 	check(not app._left.visible and not app._right.visible and not app._top.visible and not app._transport.visible and app._frame.visible, "full screen: only the video is left")

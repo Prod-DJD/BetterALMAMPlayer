@@ -1,5 +1,6 @@
 The Mac app includes ffmpeg (https://ffmpeg.org), used to write MP4 videos.
 Build: https://ffmpeg.martin-riedl.de (macOS, static, GPL configuration).
+The Android app carries a static arm64 build from https://johnvansickle.com/ffmpeg (GPL).
 ffmpeg is licensed under the GNU GPL version 3 (this build includes GPL
 components such as x264). Its source code is available from
 https://ffmpeg.org/download.html and https://git.ffmpeg.org/ffmpeg.git.

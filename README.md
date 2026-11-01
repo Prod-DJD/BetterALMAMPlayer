@@ -33,9 +33,9 @@ Get the latest build from [Releases](https://github.com/Prod-DJD/BetterALMAMPlay
 | Windows (64-bit) | `Better-ALMAMPlayer-…-Windows.zip` | Video export needs ffmpeg on your PATH (`winget install ffmpeg`). |
 | Linux (64-bit) | `Better-ALMAMPlayer-…-Linux.tar.gz` | Unzip, make it executable, run it. Video export needs ffmpeg (`sudo apt install ffmpeg`). |
 | iOS (jailbroken devices) | `Better-ALMAMPlayer-…-iOS-jailbreak.ipa` | Signed ad hoc, not by Apple: install it with your jailbreak's installer. Video export isn't available on iOS. |
-| Android 7.0+ (arm64) | `Better-ALMAMPlayer-…-Android.apk` | Allow installing from your browser or files app. Video export isn't available on Android. |
+| Android 7.0+ (arm64) | `Better-ALMAMPlayer-…-Android.apk` | Allow installing from your browser or files app. Video export uses an ffmpeg carried inside the app and saves to Movies/Better ALMAMPlayer (experimental). |
 
-Video export needs ffmpeg, which can't run inside an iOS or Android app, so phones and tablets can open, edit and play songs but not export video.
+Video export needs ffmpeg. iPhones and iPads don't allow apps to run it, so on iOS you can open, edit and play songs, and screen-record the preview. The Android build carries its own ffmpeg.
 
 ## Using it
 

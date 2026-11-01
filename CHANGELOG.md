@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.2
+
+- **Fixed a crash on start.** When macOS refused to let the app read the last song (it asks before apps read the Music folder), the app crashed, and again on every start. Files are now checked before they're opened, the last song is restored after the window is up, and one that can't be read is forgotten, with a message that says what to try.
+- **Window:** the right-hand panel no longer runs off the edge at the default size, there's more room around the scroll bars, the full-screen button sits on the corner of the video, a track's full name shows when you hover it, and the depth box shows its number.
+- **Export format menu:** MP4 first, then transparent MOV (ProRes 4444 or HEVC) and WebM. The save dialog follows it.
+- **Icons on note hits:** an **Icon size** slider (bigger by default); a new icon shows at once; the glow behind them is smooth (no rings) and weaker.
+- **Glow follows note thickness**, so thin notes get a thin glow. The slider means more or less than the usual amount.
+- **Double-click any scene slider to put it back to its usual setting.**
+- **Note editor:** drop a MIDI (or project) on it to replace the track being edited, choosing its track and whether to keep the file's timing or start in the bar the old notes began in; **Send to** moves selected notes to a new or existing track (pull hi-hats out of a drum track); notes in a part of a drum kit move up and down and join the part for their new pitch; other tracks show as faint outlines, so stacked copies can't look like one solid note.
+- **Android:** video export, with ffmpeg carried inside the APK as a native library (experimental: not yet tried on a device). Exports go to Movies/Better ALMAMPlayer.
+
 ## 1.0.1
 
 - **Full-screen preview**: the ⛶ button, F11 or ⌘F shows just the video, filling the screen (Esc leaves). Space, the arrows and a click still work.

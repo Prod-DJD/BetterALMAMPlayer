@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.3
+
+- **Smooth video export.** The export could repeat frames while notes were moving (about 3% of frames in a test song, in runs of up to 8), which looked like stutter. Each frame now waits for a real draw, and a frame that comes out identical to the one before while notes are moving is drawn again. `tools/check_video.py` counts repeated frames in any export.
+
 ## 1.0.2
 
 - **Fixed a crash on start.** When macOS refused to let the app read the last song (it asks before apps read the Music folder), the app crashed, and again on every start. Files are now checked before they're opened, the last song is restored after the window is up, and one that can't be read is forgotten, with a message that says what to try.

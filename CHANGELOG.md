@@ -4,6 +4,7 @@
 
 - Export now works the way the original ALMAMPlayer's did: a second, small copy of the app makes the video, at low priority, so your Mac and your other apps come first. The main window stays usable and shows the progress.
 - Each frame is drawn once by the engine's normal loop and read back (as Godot's Movie Maker does); nothing is forced or drawn twice, which is what overloaded the GPU and could restart the Mac.
+- The app now watches the export's real memory from outside (the operating system's own count, graphics memory included) and stops it if it passes 4 GB. The old check only saw part of it: a crash report showed the export at 26 GB while the check saw nothing wrong.
 - Stopping an export removes the half-made video; closing the app stops the export too.
 
 ## 1.0.7

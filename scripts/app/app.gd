@@ -1432,7 +1432,27 @@ func _start_render_process(out: String) -> void:
 		add_child(_render_timer)
 	_render_timer.start()
 
+## The render process may never hold more than this (a real video needs well
+## under 1 GB). Measured from outside by the operating system, so it counts
+## everything, graphics memory included, and works even if that process is stuck.
+const RENDER_MAX_KB := 4_000_000
+var _render_checks := 0
+
+func _render_too_big() -> bool:
+	if OS.get_name() not in ["macOS", "Linux"]:
+		return false
+	var out := []
+	if OS.execute("ps", ["-o", "rss=", "-p", str(_render_pid)], out) != 0 or out.is_empty():
+		return false
+	return str(out[0]).strip_edges().to_int() > RENDER_MAX_KB
+
 func _poll_render() -> void:
+	_render_checks += 1
+	if _render_pid >= 0 and _render_checks % 4 == 0 and _render_too_big():
+		OS.kill(_render_pid)
+		DirAccess.remove_absolute(_render_out)
+		_end_render(false, "The export used far more memory than a video needs, so it was stopped before it could slow down your Mac.")
+		return
 	var line := FileAccess.get_file_as_string(RENDER_STATUS).strip_edges()
 	if line.begins_with("done "):
 		_end_render(line.substr(5, 1) == "1", line.substr(7))

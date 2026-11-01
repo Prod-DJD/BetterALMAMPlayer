@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.4
+
+- **Smooth export to the end.** Exports could still stutter partway through (from about 30 seconds into a test song), because macOS slowed the app's frames when its window was in the background, and the export then reused old pictures. Each frame is now checked to be drawn for its own moment before it's saved, and the app is kept from napping during an export.
+
 ## 1.0.3
 
 - **Smooth video export.** The export could repeat frames while notes were moving (about 3% of frames in a test song, in runs of up to 8), which looked like stutter. Each frame now waits for a real draw, and a frame that comes out identical to the one before while notes are moving is drawn again. `tools/check_video.py` counts repeated frames in any export.

@@ -72,3 +72,16 @@ otherwise it is found on your system (for example `brew install ffmpeg`). Tests 
 ## License
 
 GPLv3, like the original. See [LICENSE](LICENSE) and [licenses/](licenses/). Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Support
+
+If Better ALMAMPlayer is useful to you, you can send a donation. I accept any token on these chains, USDC preferred:
+
+| Chain | Address |
+|---|---|
+| Solana | `ESpBQ2Tg9SyTRb2GQSz7LHJ5R2nKZLP17vhxf9ziFTh` |
+| Polygon | `0xbD5C233Ff80CDe7811D2360cA14ffe0A1Ce8CB92` |
+| Sui | `0x5299b8166d54ec9e46eaa54d9e7c3cd6c6b872e36e0664ef8fc769850a82863e` |
+
+Always check the address you're sending to matches one above, and the chain you're sending on. Donations are optional; the app stays free and GPLv3 either way.
+

@@ -15,6 +15,8 @@
 - A heartbeat log (heartbeat.log in the app's data folder) records once a second whether the window is answering, so a freeze shows when and where in the song it began.
 - **Fixed the cause of the freezes and crashes:** a song with two tracks of the same name (two "Guitar" tracks, say) had them treated as one, so every save and load added the notes again to both, doubling until a saved project was a gigabyte (millions of copies of a note) and the app froze or ran out of memory just drawing them. Each track now has its own identity, and a test saves and reloads such a song eight times to prove it stays put.
 - A saved project over 4 MB (a normal one is a few KB) is set aside as .too_big.json, its edits are dropped and its looks, names and order are kept, instead of freezing the app at start. One that big is no longer written either.
+- Rename boxes put the cursor at the end of the name instead of selecting all of it, so a click places the cursor where you point.
+- Exports run at normal priority (no longer lowered with renice), so they finish sooner. The memory safety stops are unchanged.
 - Stopping an export removes the half-made video; closing the app stops the export too.
 
 ## 1.0.7

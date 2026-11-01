@@ -1061,6 +1061,12 @@ func rename_track(i: int, new_name: String) -> void:
 		project.renames[t.auto_name] = new_name
 	_tracks_changed()
 
+## Puts a text box's cursor at the end of its text, with nothing selected (how
+## every text field works: a click places the cursor where it was pressed).
+func _caret_to_end(e: LineEdit) -> void:
+	e.grab_focus()
+	e.caret_column = e.text.length()
+
 ## Asks for a new name for track [i].
 func ask_rename(i: int) -> void:
 	if song == null or i < 0 or i >= song.tracks.size():
@@ -1069,7 +1075,6 @@ func ask_rename(i: int) -> void:
 	d.title = "Rename track"
 	var e := LineEdit.new()
 	e.text = song.tracks[i].name
-	e.select_all_on_focus = true
 	e.custom_minimum_size.x = 280
 	d.add_child(e)
 	d.register_text_enter(e)
@@ -1077,7 +1082,7 @@ func ask_rename(i: int) -> void:
 	d.canceled.connect(func(): d.queue_free())
 	add_child(d)
 	d.popup_centered()
-	e.grab_focus()
+	_caret_to_end(e)
 
 ## Which row shows the "it will land here" line while a track is dragged.
 var _hint_row: TrackRow
@@ -1258,12 +1263,11 @@ func _save_look_dialog() -> void:
 	d.title = "Save this look"
 	var e := LineEdit.new()
 	e.text = _title.text
-	e.select_all_on_focus = true
 	d.add_child(e)
 	d.confirmed.connect(func(): Project.save_look(e.text.strip_edges() if e.text.strip_edges() != "" else "Look", project.look); _flash("Look saved"))
 	add_child(d)
 	d.popup_centered(Vector2i(360, 100))
-	e.grab_focus()
+	_caret_to_end(e)
 
 # ---------------------------------------------------------------- replace a track
 
@@ -1522,8 +1526,6 @@ func _start_render_process(out: String) -> void:
 		_render_pid = -1
 		_on_export_finished(false, "The export couldn't start.")
 		return
-	# lower priority: ffmpeg, started by it, inherits this too
-	OS.execute("renice", ["10", "-p", str(_render_pid)])
 	_render_out = out
 	if _render_timer == null:
 		_render_timer = Timer.new()

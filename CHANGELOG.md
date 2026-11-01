@@ -13,6 +13,7 @@
 - Any WAV that isn't plain 16-bit (24-bit, float, or Logic's "extensible" header) is converted once to a 16-bit copy before loading; Godot's own loader used gigabytes and froze the app on those.
 - Opening a song writes a step-by-step trace (time and memory at each step) to load_trace.log in the app's data folder, to find what makes a start slow.
 - A heartbeat log (heartbeat.log in the app's data folder) records once a second whether the window is answering, so a freeze shows when and where in the song it began.
+- A song's saved settings over 4 MB (a damaged or runaway file; a normal one is a few KB) are set aside and the song starts fresh, instead of freezing the app for minutes at start. A project that grew that large is no longer written either.
 - Stopping an export removes the half-made video; closing the app stops the export too.
 
 ## 1.0.7

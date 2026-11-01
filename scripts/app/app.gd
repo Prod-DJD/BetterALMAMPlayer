@@ -385,6 +385,8 @@ func open_song(path: String) -> void:
 	song = s
 	project = Project.open_for(path)
 	_trace("saved project read")
+	if Project.notice != "":
+		_flash(Project.notice)
 	for name in project.extra_tracks:
 		song.add_empty_track(str(name))
 	_trace("extra tracks added")

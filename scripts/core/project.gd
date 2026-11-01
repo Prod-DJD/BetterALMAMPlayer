@@ -22,6 +22,13 @@ var renames := {}
 ## Opened for the first time (no saved project yet).
 var fresh := false
 
+## A saved project is a few kilobytes (a big edited song, a few hundred). One
+## past this is damaged or has run away: reading it froze the app for minutes
+## and used gigabytes, so it is set aside and the song starts fresh.
+const MAX_SAVED_BYTES := 4_000_000
+## What happened while opening the last project, for the person ("" if nothing).
+static var notice := ""
+
 static func _key(midi_path: String) -> String:
 	return "%s/%s.json" % [DIR, midi_path.md5_text()]
 
@@ -31,6 +38,18 @@ static func open_for(midi_path: String) -> Project:
 	var p := Project.new()
 	p.midi = midi_path
 	var f := _key(midi_path)
+	notice = ""
+	if FileAccess.file_exists(f):
+		var size := 0
+		var probe := FileAccess.open(f, FileAccess.READ)
+		if probe:
+			size = probe.get_length()
+			probe.close()
+		if size > MAX_SAVED_BYTES:
+			var aside := f.get_basename() + ".too_big.json"
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(aside))
+			DirAccess.rename_absolute(ProjectSettings.globalize_path(f), ProjectSettings.globalize_path(aside))
+			notice = "This song's saved settings had grown to %.0f MB (a damaged file), so they were set aside and the song started fresh." % (size / 1e6)
 	p.fresh = not FileAccess.file_exists(f)
 	if FileAccess.file_exists(f):
 		var d = JSON.parse_string(FileAccess.get_file_as_string(f))
@@ -62,9 +81,16 @@ func save() -> void:
 	if midi == "":
 		return
 	DirAccess.make_dir_recursive_absolute(DIR)
+	var data := {"midi": midi, "audio": audio, "edits": edits, "splits": splits, "extra_tracks": extra_tracks, "renames": renames, "look": look.to_dict()}
+	var text := JSON.stringify(data, "\t")
+	if text.length() > MAX_SAVED_BYTES:
+		# something grew without bound: don't write a file the next start can't read
+		push_error("project too big to save (%d bytes): saved without its edits" % text.length())
+		data["edits"] = {}
+		text = JSON.stringify(data, "\t")
 	var f := FileAccess.open(_key(midi), FileAccess.WRITE)
 	if f:
-		f.store_string(JSON.stringify({"midi": midi, "audio": audio, "edits": edits, "splits": splits, "extra_tracks": extra_tracks, "renames": renames, "look": look.to_dict()}, "\t"))
+		f.store_string(text)
 
 # ----- the app's own memory: last song, recent songs -----
 

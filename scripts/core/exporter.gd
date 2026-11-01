@@ -17,6 +17,7 @@ const LEAD := 1.0
 const TAIL := 2.0
 
 var _cancel := false
+var _force_mode := false # drawing frames ourselves (no real frames are coming)
 var running := false
 
 ## Where ffmpeg is: inside the app, else this folder's tools, else the
@@ -66,6 +67,32 @@ static func library_dir_in(line: String) -> String:
 	var start := line.rfind(" ", at) + 1
 	return line.substr(start, at - start).rstrip("/")
 
+## Draws the picture for the time just set and gives it back. It waits for a
+## real draw (a frame the renderer actually finished), and if the window is
+## hidden and none comes, draws one itself.
+func _render(vp: SubViewport) -> Image:
+	vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	if _force_mode:
+		RenderingServer.force_draw(false)
+	else:
+		var done := [false]
+		var mark := func(): done[0] = true
+		RenderingServer.frame_post_draw.connect(mark, CONNECT_ONE_SHOT)
+		var t0 := Time.get_ticks_msec()
+		while not done[0] and Time.get_ticks_msec() - t0 < 300:
+			await get_tree().process_frame
+		if not done[0]:
+			# no real draw is coming (the window is hidden): draw the frames
+			# ourselves from now on, and don't wait again
+			if RenderingServer.frame_post_draw.is_connected(mark):
+				RenderingServer.frame_post_draw.disconnect(mark)
+			_force_mode = true
+			RenderingServer.force_draw(false)
+	var img := vp.get_texture().get_image()
+	if img != null and img.get_format() != Image.FORMAT_RGBA8:
+		img.convert(Image.FORMAT_RGBA8)
+	return img
+
 func cancel() -> void:
 	_cancel = true
 
@@ -106,6 +133,7 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 		return
 	running = true
 	_cancel = false
+	_force_mode = false
 	var vp := SubViewport.new()
 	# drawn at the video's own size from the same 1920×1080 picture: shapes
 	# stay sharp at 1440p and 4K
@@ -114,7 +142,7 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 	vp.size = Vector2i(width, height)
 	vp.size_2d_override = Vector2i(1920, 1080)
 	vp.size_2d_override_stretch = true
-	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	vp.render_target_update_mode = SubViewport.UPDATE_DISABLED # drawn only when a frame is asked for
 	var alpha := wants_alpha(out)
 	vp.transparent_bg = alpha
 	add_child(vp)
@@ -171,24 +199,47 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 	var pipe: FileAccess = proc["stdio"]
 	var pid: int = proc["pid"]
 	var ok := true
+	# frames come as fast as they can be drawn, not as fast as the screen refreshes
+	var prev_vsync := DisplayServer.window_get_vsync_mode()
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	var prev_hash := 0
+	var prev_busy := false
+	var redrawn := 0
 	for i in frames:
 		if _cancel or not OS.is_process_running(pid):
 			ok = false
 			break
 		v.time = start + float(i) / fps
-		# drawn now, on purpose: the window's own frames stop when it's
-		# hidden or minimized, and an export must not wait on them
-		RenderingServer.force_draw(false)
-		var img := vp.get_texture().get_image()
+		var img: Image = await _render(vp)
 		if img == null: # no renderer (a headless run): nothing to draw with
 			ok = false
 			break
-		if img.get_format() != Image.FORMAT_RGBA8:
-			img.convert(Image.FORMAT_RGBA8)
+		var busy := v.drawn > 0
+		var h: int = hash(img.get_data())
+		# the same picture twice while notes are moving means the renderer
+		# was late with this frame: draw it again (it is never skipped)
+		var tries := 0
+		while busy and prev_busy and h == prev_hash and tries < 4:
+			tries += 1
+			img = await _render(vp)
+			if img == null:
+				break
+			h = hash(img.get_data())
+		if img == null:
+			ok = false
+			break
+		if tries > 0:
+			redrawn += 1
+		prev_hash = h
+		prev_busy = busy
 		pipe.store_buffer(img.get_data())
 		if i % 10 == 0:
 			progress.emit(float(i) / frames)
-			await get_tree().process_frame # the window stays responsive
+			if _force_mode:
+				await get_tree().process_frame # the window stays responsive
+	DisplayServer.window_set_vsync_mode(prev_vsync)
+	if redrawn > 0:
+		print("export: %d of %d frames had to be drawn again" % [redrawn, frames])
 	pipe.close()
 	# let ffmpeg finish the file
 	while OS.is_process_running(pid) and not _cancel:

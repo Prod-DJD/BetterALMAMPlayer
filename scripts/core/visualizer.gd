@@ -22,6 +22,9 @@ var look: Look
 ## Draw on nothing: no black, no background picture, so the frame's
 ## transparent parts stay transparent (for an alpha video).
 var transparent := false
+## How many notes the last picture drew (the exporter uses it to tell a
+## frame with nothing on it from one that should be moving).
+var drawn := 0
 ## Seconds into the song (negative: before it starts; the tracks rise in).
 var time := 0.0:
 	set(v):
@@ -109,6 +112,7 @@ func _draw() -> void:
 	var intro := _ease((time + 1.0) / 0.5)
 	var intro_y := 128.0 * (1.0 - _ease((time + 1.5) / 1.0))
 	var effects: Array = []
+	var shown := 0
 	for pair in order:
 		var tl: Look.TrackLook = pair[0]
 		var tr: Song.Track = pair[1]
@@ -167,6 +171,7 @@ func _draw() -> void:
 			else:
 				_body.shadow_size = 0
 			draw_style_box(_body, Rect2(0, -note_h / 2.0, w, note_h))
+			shown += 1
 			if w >= note_h * 0.9 and note_h >= 10.0:
 				# a soft highlight along the top edge
 				var inset := note_h * 0.22
@@ -177,6 +182,7 @@ func _draw() -> void:
 			# its pulse, at the playhead
 			if on >= 0.0 and on < max(dur - 0.025, 0.065) + 0.17:
 				effects.append([tl, n, y + dip, on, dur, _icon_of(tr, tl)])
+	drawn = shown
 	_draw_effects(effects)
 
 ## The track's icon, worked out once (not on every frame), and again as soon

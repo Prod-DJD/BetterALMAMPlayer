@@ -29,6 +29,26 @@ const MAX_SAVED_BYTES := 4_000_000
 ## What happened while opening the last project, for the person ("" if nothing).
 static var notice := ""
 
+## The saved file, minus its edits, for a file too big to read: the edits come
+## first in the file and the rest (extra tracks, look, names, splits) follows,
+## so only the start and the end are read. "" if that can't be done.
+static func _salvage(path: String, size: int) -> String:
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return ""
+	var head := f.get_buffer(2000).get_string_from_utf8()
+	var tail_len := mini(size, 2_000_000)
+	f.seek(size - tail_len)
+	var tail := f.get_buffer(tail_len).get_string_from_utf8()
+	f.close()
+	var a := head.find("\t\"audio\"")
+	var e := tail.find("\n\t\"extra_tracks\"")
+	if a < 0 or e < 0:
+		return ""
+	var audio_line := head.substr(a, head.find("\n", a) - a)
+	var text := "{\n%s\n\t\"edits\": {},%s" % [audio_line, tail.substr(e)]
+	return text if JSON.parse_string(text) is Dictionary else ""
+
 static func _key(midi_path: String) -> String:
 	return "%s/%s.json" % [DIR, midi_path.md5_text()]
 
@@ -46,10 +66,17 @@ static func open_for(midi_path: String) -> Project:
 			size = probe.get_length()
 			probe.close()
 		if size > MAX_SAVED_BYTES:
+			var kept := _salvage(f, size)
 			var aside := f.get_basename() + ".too_big.json"
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(aside))
 			DirAccess.rename_absolute(ProjectSettings.globalize_path(f), ProjectSettings.globalize_path(aside))
-			notice = "This song's saved settings had grown to %.0f MB (a damaged file), so they were set aside and the song started fresh." % (size / 1e6)
+			notice = "This song's saved edits had grown to %.0f MB (a damaged file), so they were dropped. %s" % [size / 1e6,
+					"Its looks, names and order were kept." if kept != "" else "The song started fresh."]
+			if kept != "":
+				var w := FileAccess.open(f, FileAccess.WRITE)
+				if w:
+					w.store_string(kept)
+					w.close()
 	p.fresh = not FileAccess.file_exists(f)
 	if FileAccess.file_exists(f):
 		var d = JSON.parse_string(FileAccess.get_file_as_string(f))

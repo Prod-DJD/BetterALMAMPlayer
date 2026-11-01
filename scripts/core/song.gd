@@ -141,9 +141,23 @@ func add_track(track: Track) -> void:
 func finish() -> void:
 	refresh()
 	_pristine.clear()
+	# every track needs an origin of its own: two with one origin (two tracks
+	# named alike in the file) had their notes mixed up by every save and load,
+	# and doubled each time until the saved project was a gigabyte. A repeat
+	# is numbered the way Importer.unique_names numbers it.
+	var used := {}
+	for tr in tracks:
+		if tr.origin != "":
+			used[tr.origin] = true
 	for tr in tracks:
 		if tr.origin == "":
-			tr.origin = tr.name
+			var base := tr.name
+			var n := 2
+			tr.origin = base
+			while used.has(tr.origin):
+				tr.origin = "%s %d" % [base, n]
+				n += 1
+			used[tr.origin] = true
 		_pristine[tr.origin] = _counts(tr)
 
 ## Puts the tracks in [names] order; any not named stay after, in theirs.
@@ -236,10 +250,12 @@ func edits() -> Dictionary:
 ## Applies [edits] (as [method edits] made them) to the notes as read: call
 ## before splitting tracks.
 func apply_edits(saved: Dictionary) -> void:
+	var done := {}
 	for tr in tracks:
 		var e = saved.get(tr.origin)
-		if not e is Dictionary:
-			continue
+		if not e is Dictionary or done.has(tr.origin):
+			continue # one origin's edits are applied once, never to two tracks
+		done[tr.origin] = true
 		var gone := {}
 		for k in e.get("removed", []):
 			gone[k] = gone.get(k, 0) + 1

@@ -110,5 +110,29 @@ func _initialize() -> void:
 	rs.save_midi(rw)
 	var rb := Importer.load_song(rw)
 	check(rb != null and rb.tracks[0].notes[0].release == 20, "release velocity written and read back")
+	# two tracks with one name: edits must stay put through many saves and loads
+	# (they used to double each time, up to a gigabyte of saved notes)
+	var dn := PackedByteArray()
+	dn.append_array("MThd".to_ascii_buffer()); dn.append_array(PackedByteArray([0,0,0,6, 0,1, 0,2, 1,224]))
+	for pitch in [60, 64]:
+		var tk := PackedByteArray([0, 0xFF, 0x03, 6]); tk.append_array("Guitar".to_ascii_buffer())
+		tk.append_array(PackedByteArray([0, 0x90, pitch, 100, 96, 0x80, pitch, 0, 0, 0xFF, 0x2F, 0]))
+		dn.append_array("MTrk".to_ascii_buffer()); dn.append_array(PackedByteArray([0, 0, 0, tk.size()])); dn.append_array(tk)
+	var dp := tmp.path_join("dup.mid")
+	var df := FileAccess.open(dp, FileAccess.WRITE); df.store_buffer(dn); df.close()
+	var d0 := Importer.load_song(dp)
+	check(d0 != null and d0.tracks.size() == 2 and d0.tracks[0].origin != d0.tracks[1].origin, "same-named tracks get their own origins")
+	check(d0.edits().is_empty(), "same-named tracks: no edits before anything is edited")
+	d0.tracks[0].notes.append(Song.make_note(70, 1.0, 1.5, 90))
+	var saved: Dictionary = d0.edits()
+	var stable := true
+	for cycle in 8:
+		var again := Importer.load_song(dp)
+		again.apply_edits(JSON.parse_string(JSON.stringify(saved)))
+		if again.tracks[0].notes.size() != 2 or again.tracks[1].notes.size() != 1:
+			stable = false
+		saved = again.edits()
+	check(stable, "same-named tracks: edits don't multiply over 8 save and load cycles")
+	check(JSON.stringify(saved).length() < 500, "same-named tracks: the saved edits stay tiny")
 	print("FAILS: ", fails)
 	quit(1 if fails else 0)

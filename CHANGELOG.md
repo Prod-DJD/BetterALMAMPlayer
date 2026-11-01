@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.6
+
+- **An export now guards your Mac.** Two crash reports from 1.0.4 showed the app holding about 25 GB of memory partway through an export, which starved macOS's window system and restarted the Mac. 1.0.5 removed the cause (frames were being pushed out faster than the screen could keep up). 1.0.6 also watches memory while exporting: if the app's use grows past a safe size, or the Mac itself is nearly out of memory, the export waits for it, and if it doesn't recover it stops with a clear message instead of risking the machine.
+
 ## 1.0.5
 
 - **Fixed: exporting could restart the Mac.** 1.0.4 drove the graphics chip flat out during an export (the screen's frame-rate cap was switched off and extra frames were forced), which could hang the graphics driver partway through and make macOS restart. Exports now keep the normal frame-rate cap and draw each frame once, as part of the app's own frames. They only force a frame when the window is minimized. Every frame is still checked to be drawn for its own moment, so the export stays smooth.

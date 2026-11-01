@@ -357,6 +357,10 @@ func _initialize() -> void:
 	# ---- Android: where the bundled ffmpeg lives
 	check(Exporter.library_dir_in("7b6c000000-7b6c3d0000 r-xp 00000000 fd:0b 1234 /data/app/~~abc==/com.beatprod.betteralmamplayer-xyz==/lib/arm64/libgodot_android.so") == "/data/app/~~abc==/com.beatprod.betteralmamplayer-xyz==/lib/arm64", "finds the native library folder in a maps line")
 	check(Exporter.library_dir_in("7b6c000000-7b6c3d0000 r-xp 00000000 fd:0b 1234 /system/lib64/libc.so") == "", "ignores other lines")
+	# ---- an export watches the memory it uses
+	var guard := Exporter.new()
+	check(guard.memory_trouble() == "", "normal memory use: the export carries on")
+	check(Exporter.MAX_APP_BYTES < 4_000_000_000 and Exporter.MAX_VIDEO_BYTES < 8_000_000_000, "the memory limits are well under a Mac's total")
 	# ---- full screen preview
 	app.set_fullscreen_preview(true)
 	check(not app._left.visible and not app._right.visible and not app._top.visible and not app._transport.visible and app._frame.visible, "full screen: only the video is left")

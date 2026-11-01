@@ -19,6 +19,35 @@ const TAIL := 2.0
 var _cancel := false
 ## Frames whose picture couldn't be confirmed for their time (should stay 0).
 var stale := 0
+## Set when the export was stopped on purpose (it ran short of memory).
+var stop_reason := ""
+
+## An export that holds more than this is going wrong (a frame is a few MB and
+## none are kept): stop it before it can slow or freeze the whole Mac.
+const MAX_APP_BYTES := 3_000_000_000
+const MAX_VIDEO_BYTES := 5_000_000_000
+## The Mac itself running out of memory: wait for it, up to ~20 seconds.
+const MIN_FREE_BYTES := 800_000_000
+
+## "" if memory use is fine, else what went wrong.
+func memory_trouble() -> String:
+	var app := OS.get_static_memory_usage()
+	if app > MAX_APP_BYTES:
+		return "The app's memory use grew past %.1f GB during the export, so it was stopped before it could slow down your Mac." % (app / 1e9)
+	var video := int(Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED))
+	if video > MAX_VIDEO_BYTES:
+		return "Graphics memory use grew past %.1f GB during the export, so it was stopped before it could slow down your Mac." % (video / 1e9)
+	return ""
+
+## Waits while the Mac has almost no free memory (other apps are using it).
+## False if it never came back.
+func _wait_for_memory() -> bool:
+	for i in 40:
+		var free := int(OS.get_memory_info().get("available", -1))
+		if free <= 0 or free > MIN_FREE_BYTES:
+			return true
+		await get_tree().create_timer(0.5).timeout
+	return false
 var running := false
 
 ## Where ffmpeg is: inside the app, else this folder's tools, else the
@@ -153,6 +182,7 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 	running = true
 	_cancel = false
 	stale = 0
+	stop_reason = ""
 	var vp := SubViewport.new()
 	# drawn at the video's own size from the same 1920×1080 picture: shapes
 	# stay sharp at 1440p and 4K
@@ -251,6 +281,13 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 		prev_hash = h
 		prev_busy = busy
 		pipe.store_buffer(img.get_data())
+		if i % 15 == 0:
+			stop_reason = memory_trouble()
+			if stop_reason == "" and not await _wait_for_memory():
+				stop_reason = "Your Mac is almost out of memory (other apps are using it), so the export was stopped. Close some apps and try again."
+			if stop_reason != "":
+				ok = false
+				break
 		if i % 10 == 0:
 			progress.emit(float(i) / frames)
 	if redrawn > 0 or stale > 0:
@@ -270,6 +307,9 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 	running = false
 	if _cancel:
 		finished.emit(false, "Stopped.")
+	elif stop_reason != "":
+		DirAccess.remove_absolute(out) # a video that stops partway isn't worth keeping
+		finished.emit(false, stop_reason)
 	elif not ok or not FileAccess.file_exists(out):
 		finished.emit(false, "The video couldn't be made. " + err.left(300))
 	else:

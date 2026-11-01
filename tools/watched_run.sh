@@ -31,7 +31,7 @@ stop() {
   kill "$PID" 2>/dev/null
   sleep 2
   kill -9 "$PID" 2>/dev/null
-  exit 0
+  STOPPED=1
 }
 T=0
 while kill -0 "$PID" 2>/dev/null; do
@@ -45,7 +45,11 @@ while kill -0 "$PID" 2>/dev/null; do
   [ "$MB" -gt "$MAX_MB" ] && stop "app memory ${MB} MB over ${MAX_MB} MB"
   [ "$FREE" -lt "$MIN_FREE_MB" ] && stop "Mac free memory ${FREE} MB under ${MIN_FREE_MB} MB"
   [ "$T" -ge "$LIMIT" ] && stop "time limit ${LIMIT}s reached"
+  [ -n "$STOPPED" ] && break
   T=$((T + 1))
   sleep 1
 done
 echo "app ended on its own after ${T}s" | tee -a "$LOG"
+# the app's own step-by-step load trace (what took the time, and the memory then)
+T=$(find "$HOME/Library/Application Support" -name load_trace.log -maxdepth 4 2>/dev/null | head -1)
+[ -n "$T" ] && cp "$T" "$PWD/watched_run_trace.log" && echo "copied the load trace to watched_run_trace.log"

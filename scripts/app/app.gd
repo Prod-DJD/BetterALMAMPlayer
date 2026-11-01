@@ -367,7 +367,11 @@ func _show_empty() -> void:
 # ---------------------------------------------------------------- songs
 
 func open_song(path: String) -> void:
+	_trace_t0 = 0
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://load_trace.log"))
+	_trace("open song: %s" % path.get_file())
 	var s := Importer.load_song(path)
+	_trace("midi read")
 	if s == null:
 		_flash(Importer.last_error)
 		if str(Project.state().get("last", "")) == path:
@@ -408,20 +412,42 @@ func _apply_square() -> void:
 	vis.position = Vector2(-420, 0) if sq else Vector2.ZERO
 	(_frame as AspectRatioContainer).ratio = 1.0 if sq else 16.0 / 9.0
 
+## A line in user://load_trace.log: how long each step of opening a song took
+## and how much memory the app held then (to find what makes a start slow).
+var _trace_t0 := 0
+func _trace(step: String) -> void:
+	if _trace_t0 == 0:
+		_trace_t0 = Time.get_ticks_msec()
+	var f := FileAccess.open("user://load_trace.log", FileAccess.READ_WRITE if FileAccess.file_exists("user://load_trace.log") else FileAccess.WRITE)
+	if f == null:
+		return
+	f.seek_end()
+	f.store_line("%6d ms  app %5d MB  video %5d MB  %s" % [Time.get_ticks_msec() - _trace_t0,
+			OS.get_static_memory_usage() / 1048576,
+			int(Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED)) / 1048576, step])
+	f.close()
+
 func _apply_project() -> void:
+	_trace("apply project: begin")
 	vis.song = song
 	vis.look = project.look
 	_apply_square()
 	vis.refresh()
 	_empty.visible = false
 	_export_btn.disabled = false
+	_trace("audio: begin (%s)" % project.audio.get_file())
 	_load_audio(project.audio)
+	_trace("audio: done")
 	_title.text = project.midi.get_file().get_basename()
 	_rebuild_tracks()
+	_trace("track list: done")
 	_rebuild_scene()
+	_trace("scene: done")
 	_editor.open_song(song, project.look)
+	_trace("editor: done")
 	seek_to(-Exporter.LEAD)
 	_changed()
+	_trace("apply project: end")
 
 func _load_audio(path: String) -> void:
 	_stream = null

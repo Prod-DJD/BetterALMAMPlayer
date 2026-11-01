@@ -1382,6 +1382,8 @@ func _export_dialog() -> void:
 
 func _start_export(p: String) -> void:
 	_stop()
+	# the live preview isn't needed while exporting: don't draw the picture twice
+	_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	_export_bar.value = 0
 	_export_bar.visible = true
 	_export_btn.text = "Stop exporting"
@@ -1420,6 +1422,7 @@ func _render_and_quit(midi: String, out: String) -> void:
 	_exporter.run(song, project.look, project.audio, out, project.look.export_fps, _stream.get_length() if _stream else 0.0)
 
 func _on_export_finished(ok: bool, message: String) -> void:
+	_vp.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
 	_export_bar.visible = false
 	_export_btn.text = "Export video…"
 	if ok:

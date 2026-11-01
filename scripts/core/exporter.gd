@@ -98,39 +98,24 @@ static func library_dir_in(line: String) -> String:
 	return line.substr(start, at - start).rstrip("/")
 
 ## Draws the picture for time [param t] (already set on [param v]) and gives
-## it back, riding on the app's own frames: one normal frame records the
-## picture for [param t] and renders it, at the screen's own pace (so the GPU
-## is never driven flat out; doing that could hang the graphics driver and
-## restart the Mac). Only when the window is minimized, and no frames are
-## drawn, does it draw the frame itself.
+## it back, one frame at a time:
+## 1. Setting a new time only *queues* the redraw; it happens when the app
+##    next gets a turn. So the app is given turns until the picture has been
+##    recorded for [param t] (usually one). Skipping this saved the old picture
+##    again, which looked like stutter.
+## 2. Then the picture is rendered once and read back. Nothing here depends on
+##    the window being in front, and nothing is drawn faster than the app's
+##    own frame rate allows.
 func _render(vp: SubViewport, v: Visualizer, t: float) -> Image:
-	vp.render_target_update_mode = SubViewport.UPDATE_ONCE
-	if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_MINIMIZED:
-		# no frames are drawn: one frame records the picture, then draw it
-		for attempt in 8:
-			await get_tree().process_frame
-			if v.drawn_time == t:
-				break
-		RenderingServer.force_draw(false)
-	else:
-		var drawn := [false]
-		var mark := func(): drawn[0] = true
-		RenderingServer.frame_post_draw.connect(mark)
-		var t0 := Time.get_ticks_msec()
-		# wait for a frame that drew this picture and rendered it
-		while not (drawn[0] and v.drawn_time == t and vp.render_target_update_mode == SubViewport.UPDATE_DISABLED):
-			if Time.get_ticks_msec() - t0 > 2000:
-				break # nothing is drawing after all: draw it below
-			await get_tree().process_frame
-		RenderingServer.frame_post_draw.disconnect(mark)
-		if v.drawn_time != t or vp.render_target_update_mode != SubViewport.UPDATE_DISABLED:
-			for attempt in 8:
-				if v.drawn_time == t:
-					break
-				await get_tree().process_frame
-			RenderingServer.force_draw(false)
+	for attempt in 6:
+		await get_tree().process_frame
+		if v.drawn_time == t:
+			break
 	if v.drawn_time != t:
 		stale += 1
+	vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	RenderingServer.force_draw(false)
 	var img := vp.get_texture().get_image()
 	if img != null and img.get_format() != Image.FORMAT_RGBA8:
 		img.convert(Image.FORMAT_RGBA8)
@@ -249,6 +234,9 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 	var pipe: FileAccess = proc["stdio"]
 	var pid: int = proc["pid"]
 	var ok := true
+	# never let the app's loop run away (a hidden window has nothing to pace it)
+	var prev_max_fps := Engine.max_fps
+	Engine.max_fps = 120
 	var prev_hash := 0
 	var prev_busy := false
 	var redrawn := 0
@@ -290,6 +278,7 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 				break
 		if i % 10 == 0:
 			progress.emit(float(i) / frames)
+	Engine.max_fps = prev_max_fps
 	if redrawn > 0 or stale > 0:
 		print("export: %d of %d frames drawn again, %d not confirmed" % [redrawn, frames, stale])
 	pipe.close()

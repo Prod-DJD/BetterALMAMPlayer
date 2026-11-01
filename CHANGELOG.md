@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.7
+
+- **Fixed exports that crawled.** In 1.0.5 and 1.0.6, every video frame waited out a two-second timeout (the wait was on a setting that never changes), so exports ran at under 2 frames a second. Each frame is now drawn once, right after its picture has been recorded for its moment, so exports are fast again and still smooth.
+- **Doesn't depend on the window being in front**, and the app's loop is capped so it can't run away if the window is hidden.
+- The live preview isn't drawn during an export, so the picture isn't rendered twice.
+
 ## 1.0.6
 
 - **An export now guards your Mac.** Two crash reports from 1.0.4 showed the app holding about 25 GB of memory partway through an export, which starved macOS's window system and restarted the Mac. 1.0.5 removed the cause (frames were being pushed out faster than the screen could keep up). 1.0.6 also watches memory while exporting: if the app's use grows past a safe size, or the Mac itself is nearly out of memory, the export waits for it, and if it doesn't recover it stops with a clear message instead of risking the machine.

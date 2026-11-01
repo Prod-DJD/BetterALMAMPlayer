@@ -17,7 +17,8 @@ const LEAD := 1.0
 const TAIL := 2.0
 
 var _cancel := false
-var _force_mode := false # drawing frames ourselves (no real frames are coming)
+## Frames whose picture couldn't be confirmed for their time (should stay 0).
+var stale := 0
 var running := false
 
 ## Where ffmpeg is: inside the app, else this folder's tools, else the
@@ -67,27 +68,21 @@ static func library_dir_in(line: String) -> String:
 	var start := line.rfind(" ", at) + 1
 	return line.substr(start, at - start).rstrip("/")
 
-## Draws the picture for the time just set and gives it back. It waits for a
-## real draw (a frame the renderer actually finished), and if the window is
-## hidden and none comes, draws one itself.
-func _render(vp: SubViewport) -> Image:
+## Draws the picture for time [param t] (already set on [param v]) and gives
+## it back. The visualizer's drawing for a new time only happens during one of
+## the app's frames, so this lets frames pass until the picture has really
+## been drawn for [param t], then renders it, whether or not the window is
+## showing (macOS slows or stops a hidden window's frames; drawing straight
+## away then would save the old picture again, which looked like stutter).
+func _render(vp: SubViewport, v: Visualizer, t: float) -> Image:
 	vp.render_target_update_mode = SubViewport.UPDATE_ONCE
-	if _force_mode:
-		RenderingServer.force_draw(false)
-	else:
-		var done := [false]
-		var mark := func(): done[0] = true
-		RenderingServer.frame_post_draw.connect(mark, CONNECT_ONE_SHOT)
-		var t0 := Time.get_ticks_msec()
-		while not done[0] and Time.get_ticks_msec() - t0 < 300:
-			await get_tree().process_frame
-		if not done[0]:
-			# no real draw is coming (the window is hidden): draw the frames
-			# ourselves from now on, and don't wait again
-			if RenderingServer.frame_post_draw.is_connected(mark):
-				RenderingServer.frame_post_draw.disconnect(mark)
-			_force_mode = true
-			RenderingServer.force_draw(false)
+	for attempt in 8:
+		await get_tree().process_frame
+		if v.drawn_time == t:
+			break
+	if v.drawn_time != t:
+		stale += 1
+	RenderingServer.force_draw(false)
 	var img := vp.get_texture().get_image()
 	if img != null and img.get_format() != Image.FORMAT_RGBA8:
 		img.convert(Image.FORMAT_RGBA8)
@@ -133,7 +128,7 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 		return
 	running = true
 	_cancel = false
-	_force_mode = false
+	stale = 0
 	var vp := SubViewport.new()
 	# drawn at the video's own size from the same 1920×1080 picture: shapes
 	# stay sharp at 1440p and 4K
@@ -210,7 +205,8 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 			ok = false
 			break
 		v.time = start + float(i) / fps
-		var img: Image = await _render(vp)
+		var t: float = v.time
+		var img: Image = await _render(vp, v, t)
 		if img == null: # no renderer (a headless run): nothing to draw with
 			ok = false
 			break
@@ -221,7 +217,7 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 		var tries := 0
 		while busy and prev_busy and h == prev_hash and tries < 4:
 			tries += 1
-			img = await _render(vp)
+			img = await _render(vp, v, t)
 			if img == null:
 				break
 			h = hash(img.get_data())
@@ -235,11 +231,9 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 		pipe.store_buffer(img.get_data())
 		if i % 10 == 0:
 			progress.emit(float(i) / frames)
-			if _force_mode:
-				await get_tree().process_frame # the window stays responsive
 	DisplayServer.window_set_vsync_mode(prev_vsync)
-	if redrawn > 0:
-		print("export: %d of %d frames had to be drawn again" % [redrawn, frames])
+	if redrawn > 0 or stale > 0:
+		print("export: %d of %d frames drawn again, %d not confirmed" % [redrawn, frames, stale])
 	pipe.close()
 	# let ffmpeg finish the file
 	while OS.is_process_running(pid) and not _cancel:

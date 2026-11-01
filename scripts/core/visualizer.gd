@@ -25,6 +25,9 @@ var transparent := false
 ## How many notes the last picture drew (the exporter uses it to tell a
 ## frame with nothing on it from one that should be moving).
 var drawn := 0
+## The time the last picture was actually drawn for (NAN before the first):
+## the exporter checks it, so a frame is never saved with an older picture.
+var drawn_time := NAN
 ## Seconds into the song (negative: before it starts; the tracks rise in).
 var time := 0.0:
 	set(v):
@@ -90,6 +93,7 @@ static func _ease(x: float) -> float:
 	return 0.5 - 0.5 * cos(PI * x) # sine in-out, as the original's tweens
 
 func _draw() -> void:
+	drawn_time = time
 	if not transparent:
 		draw_rect(Rect2(0, 0, WIDTH, HEIGHT), Color.BLACK)
 	if look == null:

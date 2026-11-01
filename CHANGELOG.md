@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.8
+
+- Export now works the way the original ALMAMPlayer's did: a second, small copy of the app makes the video, at low priority, so your Mac and your other apps come first. The main window stays usable and shows the progress.
+- Each frame is drawn once by the engine's normal loop and read back (as Godot's Movie Maker does); nothing is forced or drawn twice, which is what overloaded the GPU and could restart the Mac.
+- Stopping an export removes the half-made video; closing the app stops the export too.
+
 ## 1.0.7
 
 - **Fixed exports that crawled.** In 1.0.5 and 1.0.6, every video frame waited out a two-second timeout (the wait was on a setting that never changes), so exports ran at under 2 frames a second. Each frame is now drawn once, right after its picture has been recorded for its moment, so exports are fast again and still smooth.

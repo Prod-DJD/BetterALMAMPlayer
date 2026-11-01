@@ -21,6 +21,9 @@ var _cancel := false
 var stale := 0
 ## Set when the export was stopped on purpose (it ran short of memory).
 var stop_reason := ""
+## When set, the export stops as soon as this file appears (how the app
+## stops a separate render process).
+var stop_file := ""
 
 ## An export that holds more than this is going wrong (a frame is a few MB and
 ## none are kept): stop it before it can slow or freeze the whole Mac.
@@ -98,24 +101,21 @@ static func library_dir_in(line: String) -> String:
 	return line.substr(start, at - start).rstrip("/")
 
 ## Draws the picture for time [param t] (already set on [param v]) and gives
-## it back, one frame at a time:
-## 1. Setting a new time only *queues* the redraw; it happens when the app
-##    next gets a turn. So the app is given turns until the picture has been
-##    recorded for [param t] (usually one). Skipping this saved the old picture
-##    again, which looked like stutter.
-## 2. Then the picture is rendered once and read back. Nothing here depends on
-##    the window being in front, and nothing is drawn faster than the app's
-##    own frame rate allows.
+## it back, the way Godot's own Movie Maker does (the original ALMAMPlayer's
+## export): the frame is drawn by the engine's normal loop, once, and read
+## back after it. Nothing is forced or drawn twice, so the GPU is never asked
+## for more than one ordinary frame at a time.
+## Setting a new time only *queues* the redraw: the loop is given turns until
+## the picture has been recorded for [param t] (usually one), so an older
+## picture is never saved (that looked like stutter).
 func _render(vp: SubViewport, v: Visualizer, t: float) -> Image:
 	for attempt in 6:
+		vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 		await get_tree().process_frame
 		if v.drawn_time == t:
 			break
 	if v.drawn_time != t:
 		stale += 1
-	vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
-	vp.render_target_update_mode = SubViewport.UPDATE_ONCE
-	RenderingServer.force_draw(false)
 	var img := vp.get_texture().get_image()
 	if img != null and img.get_format() != Image.FORMAT_RGBA8:
 		img.convert(Image.FORMAT_RGBA8)
@@ -241,6 +241,8 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 	var prev_busy := false
 	var redrawn := 0
 	for i in frames:
+		if i % 10 == 0 and stop_file != "" and FileAccess.file_exists(stop_file):
+			_cancel = true
 		if _cancel or not OS.is_process_running(pid):
 			ok = false
 			break

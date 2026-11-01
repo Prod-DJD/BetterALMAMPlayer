@@ -76,7 +76,7 @@ func _ready() -> void:
 		var kv = a.trim_prefix("--").split("=", true, 1)
 		args[kv[0]] = kv[1] if kv.size() > 1 else ""
 	if args.has("render"):
-		_render_and_quit(args["render"], args.get("out", args["render"].get_basename() + ".mp4"))
+		_render_and_quit(args["render"], args.get("out", args["render"].get_basename() + ".mp4"), args.get("status", ""))
 		return
 	# the last song, as it was left, unless the last start never finished (a
 	# song that crashes the app must not trap it in a crash loop)
@@ -1354,6 +1354,9 @@ func _export_dialog() -> void:
 	if _exporter.running:
 		_exporter.cancel()
 		return
+	if _render_pid >= 0:
+		_stop_render()
+		return
 	var ext := Exporter.extension_for(project.look.export_format)
 	if OS.get_name() == "Android":
 		# no save dialog: the video goes in Movies/Better ALMAMPlayer
@@ -1388,7 +1391,83 @@ func _start_export(p: String) -> void:
 	_export_bar.visible = true
 	_export_btn.text = "Stop exporting"
 	_status.text = "Exporting…"
+	if OS.has_feature("pc"):
+		_start_render_process(p)
+		return
 	_exporter.run(song, project.look, _export_audio_path(), p, project.look.export_fps, _stream.get_length() if _stream else 0.0)
+
+# ---------------------------------------------------------------- render process
+
+const RENDER_STATUS := "user://export_status"
+const RENDER_STOP := "user://export_stop"
+var _render_pid := -1
+var _render_out := ""
+var _render_timer: Timer
+
+## On a computer the video is made by a second, small copy of the app, as the
+## original ALMAMPlayer did: it draws only the picture (no editor, no
+## preview), at a low priority, so the Mac stays responsive and other apps
+## come first. This window keeps working and shows its progress.
+func _start_render_process(out: String) -> void:
+	_save_now()
+	for f in [RENDER_STATUS, RENDER_STOP]:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(f))
+	var args := PackedStringArray()
+	if OS.has_feature("editor"):
+		args.append_array(["--path", ProjectSettings.globalize_path("res://")])
+	args.append_array(["--resolution", "320x180", "--", "--render=" + project.midi, "--out=" + out,
+			"--status=" + ProjectSettings.globalize_path(RENDER_STATUS)])
+	_render_pid = OS.create_process(OS.get_executable_path(), args)
+	if _render_pid <= 0:
+		_render_pid = -1
+		_on_export_finished(false, "The export couldn't start.")
+		return
+	# lower priority: ffmpeg, started by it, inherits this too
+	OS.execute("renice", ["10", "-p", str(_render_pid)])
+	_render_out = out
+	if _render_timer == null:
+		_render_timer = Timer.new()
+		_render_timer.wait_time = 0.25
+		_render_timer.timeout.connect(_poll_render)
+		add_child(_render_timer)
+	_render_timer.start()
+
+func _poll_render() -> void:
+	var line := FileAccess.get_file_as_string(RENDER_STATUS).strip_edges()
+	if line.begins_with("done "):
+		_end_render(line.substr(5, 1) == "1", line.substr(7))
+	elif line.begins_with("progress "):
+		_export_bar.value = line.substr(9).to_float()
+	if _render_pid >= 0 and not OS.is_process_running(_render_pid):
+		line = FileAccess.get_file_as_string(RENDER_STATUS).strip_edges()
+		if line.begins_with("done "):
+			_end_render(line.substr(5, 1) == "1", line.substr(7))
+		else:
+			_end_render(false, "The export stopped unexpectedly.")
+
+func _end_render(ok: bool, message: String) -> void:
+	if _render_pid < 0:
+		return
+	_render_pid = -1
+	_render_timer.stop()
+	_on_export_finished(ok, message)
+
+## Asks the render process to stop (it removes the half-made video); if it
+## doesn't within a few seconds, it is ended.
+func _stop_render() -> void:
+	var pid := _render_pid
+	var f := FileAccess.open(RENDER_STOP, FileAccess.WRITE)
+	if f:
+		f.close()
+	_status.text = "Stopping…"
+	for i in 50:
+		await get_tree().create_timer(0.1).timeout
+		if _render_pid < 0:
+			return
+	if _render_pid == pid:
+		OS.kill(pid)
+		DirAccess.remove_absolute(_render_out)
+		_end_render(false, "Stopped.")
 
 ## The sound file as ffmpeg can read it. On Android a picked file may be a
 ## content address ffmpeg can't open: it is copied into the app's own folder.
@@ -1409,15 +1488,33 @@ func _export_audio_path() -> String:
 	dst.close()
 	return ProjectSettings.globalize_path(copy)
 
-func _render_and_quit(midi: String, out: String) -> void:
+func _render_and_quit(midi: String, out: String, status := "") -> void:
+	if status != "":
+		# the render process: show nothing but the export, never wait on vsync
+		# (a window in the background isn't paced), and stop when asked
+		visible = false
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+		get_window().title = "Better ALMAMPlayer: exporting"
+		_exporter.stop_file = ProjectSettings.globalize_path(RENDER_STOP)
+	var report := func(line: String):
+		if status == "":
+			return
+		var f := FileAccess.open(status, FileAccess.WRITE)
+		if f:
+			f.store_string(line)
+			f.close()
 	open_song(midi)
 	if song == null:
 		printerr("Couldn't read ", midi)
+		report.call("done 0 The song couldn't be read.")
 		get_tree().quit(1)
 		return
-	_exporter.progress.connect(func(p): print("%d%%" % int(p * 100)))
+	_exporter.progress.connect(func(p):
+		print("%d%%" % int(p * 100))
+		report.call("progress %.4f" % p))
 	_exporter.finished.connect(func(ok, msg):
 		print("done: " if ok else "failed: ", msg)
+		report.call("done %d %s" % [1 if ok else 0, msg])
 		get_tree().quit(0 if ok else 1))
 	_exporter.run(song, project.look, project.audio, out, project.look.export_fps, _stream.get_length() if _stream else 0.0)
 
@@ -1435,3 +1532,6 @@ func _on_export_finished(ok: bool, message: String) -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		_save_now()
+		if _render_pid >= 0:
+			OS.kill(_render_pid)
+			DirAccess.remove_absolute(_render_out)

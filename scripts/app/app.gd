@@ -39,6 +39,7 @@ var _transport: Control
 var _fullscreen := false
 var _prev_window_mode := Window.MODE_WINDOWED
 var _fs_hint: Label
+var _fs_btn: Button
 var _editor: NoteEditor
 var _preview_btn: Button
 var _edit_btn: Button
@@ -79,21 +80,31 @@ func _ready() -> void:
 		return
 	# the last song, as it was left, unless the last start never finished (a
 	# song that crashes the app must not trap it in a crash loop)
+	_show_empty()
+	_restore_last.call_deferred()
+
+## The last song, as it was left. Done once the window is showing (a
+## permission question from macOS can't freeze the start), and not at all if
+## the last start never finished (a song that breaks the app must not trap it
+## in a crash loop).
+func _restore_last() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
 	var last := str(Project.state().get("last", ""))
 	var marker := "user://starting"
 	if FileAccess.file_exists(marker):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(marker))
-		_show_empty()
+		Project.forget_last()
 		_flash("The last start didn't finish, so the last song wasn't reopened.")
-	elif last != "" and FileAccess.file_exists(last):
-		var m := FileAccess.open(marker, FileAccess.WRITE)
-		if m:
-			m.store_string("1")
-			m.close()
-		open_song(last)
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(marker))
-	else:
-		_show_empty()
+		return
+	if last == "" or not FileAccess.file_exists(last):
+		return
+	var m := FileAccess.open(marker, FileAccess.WRITE)
+	if m:
+		m.store_string("1")
+		m.close()
+	open_song(last)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(marker))
 
 # ---------------------------------------------------------------- layout
 
@@ -160,7 +171,11 @@ func _build() -> void:
 	left.get_child(0).add_child(scroll)
 	_tracks_box = VBoxContainer.new()
 	_tracks_box.size_flags_horizontal = SIZE_EXPAND_FILL
-	scroll.add_child(_tracks_box)
+	var tracks_pad := MarginContainer.new()
+	tracks_pad.size_flags_horizontal = SIZE_EXPAND_FILL
+	tracks_pad.add_theme_constant_override("margin_right", 12)
+	tracks_pad.add_child(_tracks_box)
+	scroll.add_child(tracks_pad)
 
 	# middle: title, preview, transport, export
 	var mid := VBoxContainer.new()
@@ -189,7 +204,6 @@ func _build() -> void:
 	_edit_btn = _button("Edit notes", func(): _set_mode(true), "Fix, add and delete notes (Tab)")
 	_edit_btn.toggle_mode = true
 	top.add_child(_edit_btn)
-	top.add_child(_button("⛶", func(): set_fullscreen_preview(true), "Full screen: just the video (Esc to leave, F11 or ⌘F to toggle)"))
 	_status = Label.new()
 	_status.add_theme_color_override("font_color", TEXT_DIM)
 	_status.custom_minimum_size.x = 150 # a long message trims; it never widens the window
@@ -213,7 +227,10 @@ func _build() -> void:
 	mid.add_child(_editor)
 	var holder := SubViewportContainer.new()
 	holder.stretch = true
-	frame.add_child(holder)
+	var stack := Control.new() # the video, with the full-screen button over its corner
+	frame.add_child(stack)
+	holder.set_anchors_preset(PRESET_FULL_RECT)
+	stack.add_child(holder)
 	_vp = SubViewport.new()
 	_vp.size = Vector2i(1920, 1080)
 	_vp.size_2d_override = Vector2i(1920, 1080)
@@ -223,7 +240,22 @@ func _build() -> void:
 	_vp.add_child(vis)
 	holder.gui_input.connect(func(e): if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT: toggle_play())
 	_empty = _make_empty()
-	frame.add_child(_empty)
+	_empty.set_anchors_preset(PRESET_FULL_RECT)
+	stack.add_child(_empty)
+	_fs_btn = Button.new()
+	_fs_btn.text = "⛶"
+	_fs_btn.tooltip_text = "Full screen: just the video (Esc to leave, F11 or ⌘F to toggle)"
+	_fs_btn.focus_mode = Control.FOCUS_NONE
+	_fs_btn.set_anchors_preset(PRESET_BOTTOM_RIGHT)
+	_fs_btn.grow_horizontal = GROW_DIRECTION_BEGIN
+	_fs_btn.grow_vertical = GROW_DIRECTION_BEGIN
+	_fs_btn.offset_right = -10
+	_fs_btn.offset_bottom = -10
+	_fs_btn.modulate.a = 0.55
+	_fs_btn.mouse_entered.connect(func(): _fs_btn.modulate.a = 1.0)
+	_fs_btn.mouse_exited.connect(func(): _fs_btn.modulate.a = 0.55)
+	_fs_btn.pressed.connect(func(): set_fullscreen_preview(not _fullscreen))
+	stack.add_child(_fs_btn)
 
 	_set_mode(false)
 	var transport := HBoxContainer.new()
@@ -269,7 +301,11 @@ func _build() -> void:
 	_scene_box = VBoxContainer.new()
 	_scene_box.size_flags_horizontal = SIZE_EXPAND_FILL
 	_scene_box.add_theme_constant_override("separation", 6)
-	rs.add_child(_scene_box)
+	var scene_pad := MarginContainer.new()
+	scene_pad.size_flags_horizontal = SIZE_EXPAND_FILL
+	scene_pad.add_theme_constant_override("margin_right", 12)
+	scene_pad.add_child(_scene_box)
+	rs.add_child(scene_pad)
 
 	player = AudioStreamPlayer.new()
 	add_child(player)
@@ -277,6 +313,14 @@ func _build() -> void:
 
 func _panel(title: String) -> PanelContainer:
 	var p := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = PANEL
+	sb.set_corner_radius_all(12)
+	sb.content_margin_left = 14
+	sb.content_margin_right = 18 # the scrollbar keeps off the edge
+	sb.content_margin_top = 12
+	sb.content_margin_bottom = 12
+	p.add_theme_stylebox_override("panel", sb)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
 	p.add_child(v)
@@ -300,12 +344,12 @@ func _make_empty() -> Control:
 	v.add_theme_constant_override("separation", 12)
 	c.add_child(v)
 	var l := Label.new()
-	l.text = "Drop a MIDI file or a project (FL Studio .flp, Ableton .als) here."
+	l.text = "Drop a MIDI file or a project (FL Studio, Ableton, Logic) here."
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.add_theme_font_size_override("font_size", 20)
 	v.add_child(l)
 	var hint := Label.new()
-	hint.text = "Every MIDI track is found by itself. A sound file named like the song (song.mid + song.mp3) is picked up too.\nLogic: File ▸ Export ▸ All Tracks as MIDI Files, then drop that."
+	hint.text = "Every MIDI track is found by itself. A sound file named like the song (song.mid + song.mp3) is picked up too."
 	hint.add_theme_color_override("font_color", TEXT_DIM)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(hint)
@@ -325,6 +369,8 @@ func open_song(path: String) -> void:
 	var s := Importer.load_song(path)
 	if s == null:
 		_flash(Importer.last_error)
+		if str(Project.state().get("last", "")) == path:
+			Project.forget_last() # don't try the same file on every start
 		return
 	_stop()
 	song = s
@@ -383,14 +429,21 @@ func _load_audio(path: String) -> void:
 		player.stream = null
 	else:
 		var low := path.to_lower()
-		if low.ends_with(".mp3"):
-			_stream = AudioStreamMP3.load_from_file(path)
-		elif low.ends_with(".ogg"):
-			_stream = AudioStreamOggVorbis.load_from_file(path)
-		elif low.ends_with(".wav"):
-			_stream = AudioStreamWAV.load_from_file(path)
+		var f := FileAccess.open(path, FileAccess.READ)
+		if f == null:
+			_flash(Project.read_problem(path))
+		else:
+			var bytes := f.get_buffer(f.get_length())
+			f.close()
+			if low.ends_with(".mp3"):
+				_stream = AudioStreamMP3.load_from_buffer(bytes)
+			elif low.ends_with(".ogg"):
+				_stream = AudioStreamOggVorbis.load_from_buffer(bytes)
+			elif low.ends_with(".wav"):
+				_stream = AudioStreamWAV.load_from_buffer(bytes)
+			if _stream == null:
+				_flash("That sound file couldn't be read.")
 		if _stream == null:
-			_flash("That sound file couldn't be read.")
 			project.audio = ""
 		player.stream = _stream
 	_rebuild_scene()
@@ -892,14 +945,16 @@ func _rebuild_scene() -> void:
 	if project == null:
 		return
 	var l := project.look
-	_slider("Speed", 80, 1200, 10, l.speed, func(v): l.speed = v, "px/s")
-	_slider("Notes reach up to", 200, 1080, 1, l.top_margin, func(v): l.top_margin = v, "px")
-	_slider("Lowest note sits at", 0, 700, 1, -l.vertical_offset, func(v): l.vertical_offset = -v, "px up")
-	_slider("Velocity effect", 0, 1, 0.01, l.velocity_strength, func(v): l.velocity_strength = v, "note on & off")
-	_slider("Pitch bend", 0, 2, 0.01, l.pitch_bend_strength, func(v): l.pitch_bend_strength = v)
-	_slider("Glow", 0, 1.5, 0.01, l.glow, func(v): l.glow = v)
-	_slider("Note thickness", 0.4, 2.0, 0.01, l.thickness, func(v): l.thickness = v, "×")
-	_slider("Audio delay", -1000, 1000, 5, l.audio_offset * 1000.0, func(v): l.audio_offset = v / 1000.0, "ms")
+	var dflt := Look.new() # the usual settings, for a double-click to come back to
+	_slider("Speed", 80, 1200, 10, l.speed, func(v): l.speed = v, "px/s", dflt.speed)
+	_slider("Notes reach up to", 200, 1080, 1, l.top_margin, func(v): l.top_margin = v, "px", dflt.top_margin)
+	_slider("Lowest note sits at", 0, 700, 1, -l.vertical_offset, func(v): l.vertical_offset = -v, "px up", -dflt.vertical_offset)
+	_slider("Velocity effect", 0, 1, 0.01, l.velocity_strength, func(v): l.velocity_strength = v, "note on & off", dflt.velocity_strength)
+	_slider("Pitch bend", 0, 2, 0.01, l.pitch_bend_strength, func(v): l.pitch_bend_strength = v, "", dflt.pitch_bend_strength)
+	_slider("Glow", 0, 1.5, 0.01, l.glow, func(v): l.glow = v, "×", dflt.glow)
+	_slider("Note thickness", 0.4, 2.0, 0.01, l.thickness, func(v): l.thickness = v, "×", dflt.thickness)
+	_slider("Icon size", 0.4, 4.0, 0.05, l.icon_size, func(v): l.icon_size = v, "×", dflt.icon_size)
+	_slider("Audio delay", -1000, 1000, 5, l.audio_offset * 1000.0, func(v): l.audio_offset = v / 1000.0, "ms", dflt.audio_offset * 1000.0)
 	var sq := CheckButton.new()
 	sq.text = "Square video (1:1)"
 	sq.button_pressed = l.square
@@ -907,22 +962,14 @@ func _rebuild_scene() -> void:
 	_scene_box.add_child(sq)
 	_scene_box.add_child(_section("Export"))
 	var qrow := HBoxContainer.new()
-	var res := OptionButton.new()
-	for h in [[1080, "1080p"], [1440, "1440p"], [2160, "4K (2160p)"]]:
+	var res := _dropdown()
+	for h in [[1080, "1080p"], [1440, "1440p"], [2160, "4K"]]:
 		res.add_item(h[1], h[0])
 	res.select(res.get_item_index(l.export_height))
 	res.tooltip_text = "Video size. 4K takes much longer and makes big files."
 	res.item_selected.connect(func(i): l.export_height = res.get_item_id(i); _changed())
 	qrow.add_child(res)
-	var alpha := OptionButton.new()
-	alpha.add_item("Transparent: ProRes 4444 (.mov, best for editing)", 0)
-	alpha.add_item("Transparent: HEVC (.mov, smaller; Apple, untested)", 1)
-	alpha.add_item("Transparent: VP9 (.webm, smallest)", 2)
-	alpha.select(["prores", "hevc", "vp9"].find(l.alpha_codec))
-	alpha.tooltip_text = "The codec used when you export with a transparent background (.mov or .webm)"
-	alpha.item_selected.connect(func(i): l.alpha_codec = ["prores", "hevc", "vp9"][i]; _changed())
-	qrow.add_child(alpha)
-	var fps := OptionButton.new()
+	var fps := _dropdown()
 	for f in [24, 30, 60, 120]:
 		fps.add_item("%d fps" % f, f)
 	fps.select(fps.get_item_index(l.export_fps))
@@ -930,6 +977,16 @@ func _rebuild_scene() -> void:
 	fps.item_selected.connect(func(i): l.export_fps = fps.get_item_id(i); _changed())
 	qrow.add_child(fps)
 	_scene_box.add_child(qrow)
+	var fmt := _dropdown()
+	var formats := ["mp4", "prores", "hevc", "webm"]
+	fmt.add_item("MP4 (plays anywhere)", 0)
+	fmt.add_item("MOV transparent: ProRes 4444 (big)", 1)
+	fmt.add_item("MOV transparent: HEVC (small, Apple)", 2)
+	fmt.add_item("WebM transparent: VP9 (smallest)", 3)
+	fmt.select(maxi(formats.find(l.export_format), 0))
+	fmt.tooltip_text = "MP4 is on a black (or picture) background. The transparent ones drop the background so the notes sit straight on other footage, no keying."
+	fmt.item_selected.connect(func(i): l.export_format = formats[i]; _changed())
+	_scene_box.add_child(fmt)
 
 	_scene_box.add_child(_section("Sound"))
 	var snd := Label.new()
@@ -988,13 +1045,23 @@ func _rebuild_scene() -> void:
 	keys.add_theme_font_size_override("font_size", 12)
 	_scene_box.add_child(keys)
 
+## A dropdown that shows as much as fits (a long choice never widens the
+## panel past the window).
+func _dropdown() -> OptionButton:
+	var o := OptionButton.new()
+	o.fit_to_longest_item = false
+	o.clip_text = true
+	o.size_flags_horizontal = SIZE_EXPAND_FILL
+	o.custom_minimum_size.x = 60
+	return o
+
 func _section(t: String) -> Label:
 	var l := Label.new()
 	l.text = t
 	l.add_theme_color_override("font_color", ACCENT)
 	return l
 
-func _slider(label: String, lo: float, hi: float, step: float, value: float, set_value: Callable, unit := "") -> void:
+func _slider(label: String, lo: float, hi: float, step: float, value: float, set_value: Callable, unit := "", default_value := NAN) -> void:
 	var head := HBoxContainer.new()
 	var l := Label.new()
 	l.text = label
@@ -1019,6 +1086,14 @@ func _slider(label: String, lo: float, hi: float, step: float, value: float, set
 	_scene_box.add_child(s)
 	s.value_changed.connect(func(v): num.set_value_no_signal(v); set_value.call(v); _changed())
 	num.value_changed.connect(func(v): s.set_value_no_signal(v); set_value.call(v); _changed())
+	if not is_nan(default_value):
+		s.tooltip_text = "Double-click to go back to the usual setting"
+		l.tooltip_text = s.tooltip_text
+		l.mouse_filter = MOUSE_FILTER_STOP
+		var reset := func():
+			s.value = default_value # the slider's own change brings the number and the picture with it
+		s.gui_input.connect(func(e): if e is InputEventMouseButton and e.double_click and e.button_index == MOUSE_BUTTON_LEFT: reset.call())
+		l.gui_input.connect(func(e): if e is InputEventMouseButton and e.double_click and e.button_index == MOUSE_BUTTON_LEFT: reset.call())
 
 func _save_look_dialog() -> void:
 	var d := AcceptDialog.new()
@@ -1131,13 +1206,15 @@ func _export_dialog() -> void:
 	d.use_native_dialog = true
 	d.file_mode = FileDialog.FILE_MODE_SAVE_FILE
 	d.access = FileDialog.ACCESS_FILESYSTEM
-	d.filters = PackedStringArray(["*.mov ; QuickTime, transparent background", "*.webm ; WebM, transparent background (smallest)", "*.mp4 ; MP4 video, black background"])
-	d.current_file = _title.text + ".mov"
+	var ext := Exporter.extension_for(project.look.export_format)
+	var names := {"mp4": "MP4 video", "mov": "QuickTime video, transparent background", "webm": "WebM video, transparent background"}
+	d.filters = PackedStringArray(["*.%s ; %s" % [ext, names[ext]]])
+	d.current_file = _title.text + "." + ext
 	d.current_dir = project.midi.get_base_dir()
 	d.file_selected.connect(func(p):
 		var low: String = p.to_lower()
 		if not (low.ends_with(".mov") or low.ends_with(".mp4") or low.ends_with(".webm")):
-			p += ".mov"
+			p += "." + ext
 		_stop()
 		_export_bar.value = 0
 		_export_bar.visible = true

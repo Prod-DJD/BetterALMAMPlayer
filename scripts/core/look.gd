@@ -48,6 +48,9 @@ var pitch_bend_strength := 0.5
 ## default, which follows the note spacing).
 var glow := 0.6
 var thickness := 1.0
+## How big the track icon is when a note hits (× a size that follows the
+## note thickness).
+var icon_size := 1.6
 ## Seconds the notes are shifted against the audio (+: notes later).
 var audio_offset := 0.0
 var square := false
@@ -56,10 +59,11 @@ var square := false
 ## its frame rate.
 var export_height := 1080
 var export_fps := 60
-## The codec for a transparent video: "prores" (.mov, the best for editing,
-## the biggest), "hevc" (.mov, much smaller, Apple apps), or "vp9" (.webm,
-## the smallest; browsers and some editors).
-var alpha_codec := "prores"
+## The video format: "mp4" (H.264, on black, plays anywhere), or one that
+## keeps a transparent background: "prores" (.mov, the best for editing, the
+## biggest), "hevc" (.mov, much smaller, Apple apps) or "webm" (VP9, the
+## smallest; browsers and some editors).
+var export_format := "mp4"
 var background := ""
 ## Track name → TrackLook
 var tracks := {}
@@ -90,8 +94,8 @@ func to_dict() -> Dictionary:
 		"version": 3, "speed": speed, "vertical_offset": vertical_offset,
 		"top_margin": top_margin, "velocity_strength": velocity_strength,
 		"pitch_bend_strength": pitch_bend_strength, "audio_offset": audio_offset,
-			"glow": glow, "thickness": thickness,
-		"square": square, "export_height": export_height, "export_fps": export_fps, "alpha_codec": alpha_codec, "background": background, "tracks": tr, "order": order,
+			"glow": glow, "thickness": thickness, "icon_size": icon_size,
+		"square": square, "export_height": export_height, "export_fps": export_fps, "export_format": export_format, "background": background, "tracks": tr, "order": order,
 	}
 
 static func from_dict(d: Dictionary) -> Look:
@@ -104,10 +108,11 @@ static func from_dict(d: Dictionary) -> Look:
 	l.audio_offset = float(d.get("audio_offset", l.audio_offset))
 	l.glow = float(d.get("glow", l.glow))
 	l.thickness = float(d.get("thickness", l.thickness))
+	l.icon_size = clampf(float(d.get("icon_size", l.icon_size)), 0.3, 6.0)
 	l.square = bool(d.get("square", false))
 	l.export_height = int(d.get("export_height", 1080)) if int(d.get("export_height", 1080)) in [1080, 1440, 2160] else 1080
 	l.export_fps = int(d.get("export_fps", 60)) if int(d.get("export_fps", 60)) in [24, 30, 60, 120] else 60
-	l.alpha_codec = str(d.get("alpha_codec", "prores")) if str(d.get("alpha_codec", "prores")) in ["prores", "hevc", "vp9"] else "prores"
+	l.export_format = str(d.get("export_format", "mp4")) if str(d.get("export_format", "mp4")) in ["mp4", "prores", "hevc", "webm"] else "mp4"
 	l.background = str(d.get("background", ""))
 	var o = d.get("order", [])
 	if o is Array:

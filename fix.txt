@@ -1,0 +1,42 @@
+This log shows the cause.
+
+**What happens at startup**
+1. The app reads `~/Library/Application Support/ALMAMPlayer/state.json`. This file remembers the last song you had open. In your case it points to a MIDI file at `~/Music/Logic/Project 17/Project 17.mid`.
+2. It writes a small marker file called `starting`, then tries to reopen that song.
+3. Opening a file inside `~/Music` is what triggers macOS's "Apple Music, media library" popup. The popup doesn't come from Godot, ffmpeg or the OS. The app asks for it by reopening that song.
+4. The `open` call took 3.4 seconds, which was the time you spent on the popup. When you clicked Don't Allow it failed with errno 1 (permission denied).
+5. The app exited 17 ms later. The crash report shows a null-pointer crash, so the app is using the result of the failed open without checking it.
+
+`state.json` is not touched by reinstalling, and it keeps pointing at that file. So the same failed open happens on every launch, and the app crashes every time. When you click Allow, the open succeeds and nothing breaks.
+
+**Quick fix for you right now**
+This makes the app forget the last song, so it launches normally:
+```
+rm ~/Library/Application\ Support/ALMAMPlayer/state.json ~/Library/Application\ Support/ALMAMPlayer/starting
+```
+
+**Fix in the code**
+1. Find the code that restores the last song. Search the repo for `state.json` and `starting`. On the GitHub site, use the search box at the top, or run this in Terminal inside your cloned copy:
+   ```
+   grep -rn "state.json\|\"starting\"\|starting" scripts
+   ```
+2. Before opening the remembered file, check that the open actually succeeds. `file_exists()` isn't enough, because the file does exist and only the open is refused:
+   ```gdscript
+   var f := FileAccess.open(path, FileAccess.READ)
+   if f == null:
+       # denied or missing: forget it and start empty
+       last_song = ""
+       save_state()
+       return
+   ```
+   The same check belongs wherever the app loads a MIDI file, so a denial from the Open dialog also can't crash it.
+3. The `starting` file looks like a crash-loop guard. Check that the app skips restoring the last song when `starting` is still there at launch, and deletes it once startup finishes. Here it didn't stop the crash, so something about that guard may not be working as intended.
+4. Optional: reopen the last song a moment after the window appears (`call_deferred`) instead of during startup. Then a permission popup can't freeze the app before it shows anything.
+
+To confirm the fix, copy a MIDI file into `~/Music`, open it in the app, quit, then reset the permission and relaunch:
+```
+tccutil reset MediaLibrary com.beatprod.betteralmamplayer
+```
+Click Don't Allow. The app should start empty and not crash.
+
+If you paste the script that reads `state.json`, I'll write the exact change.

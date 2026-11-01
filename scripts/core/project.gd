@@ -86,6 +86,30 @@ static func remember(midi_path: String) -> void:
 	if f:
 		f.store_string(JSON.stringify(s, "\t"))
 
+## Why [param path] can't be read, in words for the person, or "" if it can.
+## [method FileAccess.file_exists] isn't enough: a file in a protected folder
+## (macOS asks before apps read the Music folder, for one) exists but the
+## open is refused.
+static func read_problem(path: String) -> String:
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f != null:
+		f.close()
+		return ""
+	var err := FileAccess.get_open_error()
+	if err == ERR_FILE_NOT_FOUND or not FileAccess.file_exists(path):
+		return "That file isn't there any more."
+	# it exists but won't open: usually the OS saying no
+	return "That file exists but couldn't be read (%s). If it's in your Music folder, macOS may have blocked it: allow it in System Settings ▸ Privacy & Security (Files and Folders, or Media & Apple Music), or move the project out of that folder." % error_string(err)
+
+## Stops the next start from reopening the last song.
+static func forget_last() -> void:
+	var s := state()
+	if s.has("last"):
+		s.erase("last")
+		var f := FileAccess.open(STATE, FileAccess.WRITE)
+		if f:
+			f.store_string(JSON.stringify(s, "\t"))
+
 static func recent() -> Array:
 	return state().get("recent", []).filter(func(p): return FileAccess.file_exists(p))
 

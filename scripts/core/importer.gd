@@ -14,6 +14,13 @@ static func is_song_file(path: String) -> bool:
 
 static func load_song(path: String) -> Song:
 	last_error = ""
+	# a Logic project is a folder: its song data is the file to check
+	var check := path.path_join("Alternatives/000/ProjectData") if path.get_extension().to_lower() == "logicx" else path
+	if FileAccess.file_exists(check) or FileAccess.file_exists(path):
+		var problem := Project.read_problem(check) if FileAccess.file_exists(check) else ""
+		if problem != "":
+			last_error = problem
+			return null
 	match path.get_extension().to_lower():
 		"mid", "midi":
 			var s := Song.load_file(path)

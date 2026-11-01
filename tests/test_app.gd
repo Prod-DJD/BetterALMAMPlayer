@@ -246,6 +246,52 @@ func _initialize() -> void:
 	check(icons_ok and Icons.names().size() >= 100, "%d icons all drawn" % Icons.names().size())
 	for k in ["winds", "drums", "fx"]:
 		check(IconData.SHAPES.has(Icons.ALIASES[k]), "old icon name %s still works" % k)
+	# ---- a file the OS won't let us read (macOS does this for ~/Music until allowed)
+	var denied := OS.get_environment("TMPDIR").path_join("denied_%d.mid" % Time.get_ticks_msec())
+	var okp := FileAccess.open(denied, FileAccess.WRITE); okp.store_buffer(dm); okp.close()
+	OS.execute("chmod", ["000", denied])
+	var before_song = app.song
+	app.open_song(denied) # must not crash, and must leave the current song alone
+	check(app.song == before_song and Importer.last_error != "", "unreadable file: a message, no crash (%s)" % Importer.last_error.left(40))
+	check(Project.read_problem(denied) != "", "read_problem names the trouble")
+	var stash := Project.state().duplicate()
+	var sf := FileAccess.open(Project.STATE, FileAccess.WRITE); sf.store_string(JSON.stringify({"last": denied, "recent": [denied]})); sf.close()
+	app.open_song(denied)
+	check(not Project.state().has("last"), "an unreadable last song is forgotten, so the next start is clean")
+	var sf2 := FileAccess.open(Project.STATE, FileAccess.WRITE); sf2.store_string(JSON.stringify(stash)); sf2.close()
+	OS.execute("chmod", ["644", denied])
+	DirAccess.remove_absolute(denied)
+	# ---- an unreadable sound file
+	var badwav := OS.get_environment("TMPDIR").path_join("denied_%d.wav" % Time.get_ticks_msec())
+	var wf := FileAccess.open(badwav, FileAccess.WRITE); wf.store_string("x"); wf.close()
+	OS.execute("chmod", ["000", badwav])
+	app._load_audio(badwav)
+	check(app.project.audio == "" and app._stream == null, "unreadable sound file: no crash, no sound set")
+	OS.execute("chmod", ["644", badwav])
+	DirAccess.remove_absolute(badwav)
+	# ---- sliders: a double-click goes back to the usual setting
+	app.project.look.speed = 700.0
+	app._rebuild_scene()
+	var speed_slider: HSlider = null
+	for i in app._scene_box.get_child_count():
+		var c = app._scene_box.get_child(i)
+		if c is HBoxContainer and c.get_child(0) is Label and c.get_child(0).text == "Speed":
+			speed_slider = app._scene_box.get_child(i + 1)
+	check(speed_slider != null and is_equal_approx(speed_slider.value, 700.0), "speed slider found at 700")
+	var dbl := InputEventMouseButton.new()
+	dbl.button_index = MOUSE_BUTTON_LEFT
+	dbl.pressed = true
+	dbl.double_click = true
+	speed_slider.gui_input.emit(dbl)
+	check(is_equal_approx(app.project.look.speed, Look.new().speed) and is_equal_approx(speed_slider.value, Look.new().speed), "double-click resets the speed to the usual 300")
+	# ---- hit icons: the glow follows the note thickness, and a new icon shows at once
+	var tr0: Song.Track = app.song.tracks[0]
+	var tl0: Look.TrackLook = app.project.look.track_look(tr0.name, 0, app.song.tracks.size())
+	tl0.icon = "gong"
+	check(app.vis._icon_of(tr0, tl0) == "gong", "icon shown is the chosen one")
+	tl0.icon = "kick"
+	check(app.vis._icon_of(tr0, tl0) == "kick", "a newly chosen icon shows at once (no stale cache)")
+	check(Look.new().icon_size > 1.0 and Look.from_dict({"icon_size": 99}).icon_size <= 6.0, "icon size: bigger by default, kept in range")
 	# ---- full screen preview
 	app.set_fullscreen_preview(true)
 	check(not app._left.visible and not app._right.visible and not app._top.visible and not app._transport.visible and app._frame.visible, "full screen: only the video is left")
@@ -254,6 +300,7 @@ func _initialize() -> void:
 	# ---- transparent formats
 	check(Exporter.wants_alpha("a.mov") and Exporter.wants_alpha("a.webm") and not Exporter.wants_alpha("a.mp4"), "alpha for .mov and .webm only")
 	check(Exporter.alpha_codec_for("a.webm", "prores") == "vp9" and Exporter.alpha_codec_for("a.mov", "hevc") == "hevc", "a .webm is always VP9; a .mov takes the look's choice")
-	check(Look.from_dict({"alpha_codec": "hevc"}).alpha_codec == "hevc" and Look.from_dict({"alpha_codec": "nope"}).alpha_codec == "prores", "alpha codec saved, bad values fall back")
+	check(Look.from_dict({"export_format": "hevc"}).export_format == "hevc" and Look.from_dict({"export_format": "nope"}).export_format == "mp4" and Look.new().export_format == "mp4", "export format saved; the default is MP4; bad values fall back")
+	check(Exporter.extension_for("mp4") == "mp4" and Exporter.extension_for("prores") == "mov" and Exporter.extension_for("hevc") == "mov" and Exporter.extension_for("webm") == "webm", "each format has its file ending")
 	print("FAILS: ", fails)
 	quit(1 if fails else 0)

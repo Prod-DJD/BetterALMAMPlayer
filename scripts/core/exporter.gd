@@ -50,12 +50,21 @@ static func wants_alpha(out: String) -> bool:
 	var low := out.to_lower()
 	return low.ends_with(".mov") or low.ends_with(".webm")
 
-## The video codec for a transparent [out]: a .webm is always VP9 (WebM
-## carries VP9, not ProRes); a .mov uses the look's choice.
-static func alpha_codec_for(out: String, codec: String) -> String:
+## The video codec for a transparent [param out]: a .webm is always VP9
+## (WebM carries VP9, not ProRes); a .mov uses the look's format.
+static func alpha_codec_for(out: String, format: String) -> String:
 	if out.to_lower().ends_with(".webm"):
 		return "vp9"
-	return codec
+	return "hevc" if format == "hevc" else "prores"
+
+## The file ending a format is saved with.
+static func extension_for(format: String) -> String:
+	match format:
+		"prores", "hevc":
+			return "mov"
+		"webm":
+			return "webm"
+	return "mp4"
 
 ## Renders [song] with [look] (and [audio], if any) to [out] at [fps].
 func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT, audio_length := 0.0) -> void:
@@ -106,7 +115,7 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 	if look.square:
 		args.append_array(["-vf", "crop=%d:%d" % [height, height]])
 	if alpha:
-		match alpha_codec_for(out, look.alpha_codec):
+		match alpha_codec_for(out, look.export_format):
 			"hevc":
 				# Apple's compact transparent video (macOS): smaller than ProRes
 				args.append_array(["-c:v", "hevc_videotoolbox", "-alpha_quality", "0.75",

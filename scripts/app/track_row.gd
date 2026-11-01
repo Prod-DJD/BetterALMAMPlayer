@@ -58,7 +58,8 @@ func setup(the_app, t: Song.Track, look: Look.TrackLook, i := 0) -> void:
 	name.size_flags_horizontal = SIZE_EXPAND_FILL
 	name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	name.clip_text = true
-	name.tooltip_text += "\nDouble-click to rename"
+	name.mouse_filter = MOUSE_FILTER_PASS # so hovering shows the full name
+	name.tooltip_text = "%s\n%d notes · double-click to rename" % [track.name, track.notes.size()]
 	_name_label = name
 	row.add_child(name)
 	var more := MenuButton.new()
@@ -82,8 +83,9 @@ func setup(the_app, t: Song.Track, look: Look.TrackLook, i := 0) -> void:
 	depth.max_value = 4.0
 	depth.step = 0.02
 	depth.value = tl.parallax
-	depth.suffix = "× depth"
-	depth.tooltip_text = "How fast this track moves. Who is in front follows the list: the top track is in front"
+	depth.suffix = "×"
+	depth.custom_minimum_size.x = 86
+	depth.tooltip_text = "Depth: how fast this track moves (more is faster). Who is in front follows the list: the top track is in front"
 	depth.value_changed.connect(func(x): tl.parallax = x; app._changed())
 	row2.add_child(depth)
 	var shape := OptionButton.new()
@@ -257,7 +259,7 @@ func _choose(kind: String) -> void:
 	tl.icon = kind
 	_icon.kind = _current_icon()
 	_picker.hide()
-	app._changed()
+	app._changed(true)
 
 func refresh_color() -> void:
 	_icon.tint = tl.color

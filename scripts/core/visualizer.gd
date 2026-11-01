@@ -31,11 +31,23 @@ var time := 0.0:
 var _tex_cache := {} # path → Texture2D (the background picture only)
 var _background: Texture2D
 var _background_path := "?"
-var _icons := {} # track name → icon name (worked out once per song)
+var _icons := {} # track name → [the chosen icon, the icon shown] (worked out once)
+var _glow_tex: GradientTexture2D # one soft round glow, smooth to its edge
 var _body := StyleBoxFlat.new()
 var _sheen := StyleBoxFlat.new()
 
 func _init() -> void:
+	var g := Gradient.new()
+	g.offsets = PackedFloat32Array([0.0, 0.18, 0.4, 0.62, 0.82, 1.0])
+	g.colors = PackedColorArray([Color(1, 1, 1, 1.0), Color(1, 1, 1, 0.62), Color(1, 1, 1, 0.28),
+			Color(1, 1, 1, 0.1), Color(1, 1, 1, 0.025), Color(1, 1, 1, 0.0)])
+	_glow_tex = GradientTexture2D.new()
+	_glow_tex.gradient = g
+	_glow_tex.fill = GradientTexture2D.FILL_RADIAL
+	_glow_tex.fill_from = Vector2(0.5, 0.5)
+	_glow_tex.fill_to = Vector2(1.0, 0.5)
+	_glow_tex.width = 256
+	_glow_tex.height = 256
 	_body.anti_aliasing = true
 	_body.shadow_offset = Vector2.ZERO
 	_sheen.anti_aliasing = true
@@ -151,7 +163,7 @@ func _draw() -> void:
 			_body.set_corner_radius_all(int(w / 2.0) if tl.staccato else int(radius))
 			if lit > 0.02 and look.glow > 0.01:
 				_body.shadow_color = Color(color.r, color.g, color.b, 0.5 * look.glow * lit * intro)
-				_body.shadow_size = int(16.0 * look.glow * lit)
+				_body.shadow_size = int(note_h * 0.95 * look.glow * lit)
 			else:
 				_body.shadow_size = 0
 			draw_style_box(_body, Rect2(0, -note_h / 2.0, w, note_h))
@@ -167,11 +179,14 @@ func _draw() -> void:
 				effects.append([tl, n, y + dip, on, dur, _icon_of(tr, tl)])
 	_draw_effects(effects)
 
-## The track's icon, worked out once per song (not on every frame).
+## The track's icon, worked out once (not on every frame), and again as soon
+## as a different one is chosen.
 func _icon_of(tr: Song.Track, tl: Look.TrackLook) -> String:
-	if not _icons.has(tr.name):
-		_icons[tr.name] = Icons.for_track(tl.icon, tr)
-	return _icons[tr.name]
+	var cached = _icons.get(tr.name)
+	if cached == null or cached[0] != tl.icon:
+		cached = [tl.icon, Icons.for_track(tl.icon, tr)]
+		_icons[tr.name] = cached
+	return cached[1]
 
 ## Each note hit draws the track's own icon at the playhead, with a soft
 ## glow behind it, and it fades out as the note ends.
@@ -198,16 +213,17 @@ func _draw_effects(effects: Array) -> void:
 			s *= 0.55 + n.velocity / 127.0 * 0.5
 		var col: Color = tl.color
 		var center := Vector2(PLAYHEAD, y)
-		var size: float = note_height() * 2.6 * s
+		var size: float = note_height() * 2.6 * look.icon_size * s
 		if size < 1.0:
 			continue
+		# a soft glow behind the icon: it reaches as far past the icon as a
+		# note's own glow reaches past the note (so it scales with thickness),
+		# and fades smoothly to nothing, no rings
 		var g := look.glow
-		# a soft halo behind the icon
-		var r := size * 0.6
-		var fades := [0.07, 0.11, 0.17]
-		var radii := [2.3, 1.7, 1.25]
-		for k in 3:
-			draw_circle(center, r * radii[k], Color(col.r, col.g, col.b, fades[k] * g * a))
+		if g > 0.01:
+			var reach := size * 0.5 + note_height() * (0.5 + 0.9 * g)
+			draw_texture_rect(_glow_tex, Rect2(center - Vector2.ONE * reach, Vector2.ONE * reach * 2.0), false,
+					Color(col.r, col.g, col.b, minf(0.38 * g, 0.6) * a))
 		Icons.draw(self, kind, Rect2(center - Vector2.ONE * size / 2.0, Vector2.ONE * size), Color(
 			minf(col.r + 0.1, 1.0), minf(col.g + 0.1, 1.0), minf(col.b + 0.1, 1.0), a))
 

@@ -58,6 +58,8 @@ func _ready() -> void:
 		win.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
 		win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
 		win.content_scale_size = Vector2i(1280, 720)
+	_hb = Thread.new()
+	_hb.start(_heartbeat)
 	get_window().files_dropped.connect(_on_files_dropped)
 	theme = _make_theme()
 	_build()
@@ -377,11 +379,15 @@ func open_song(path: String) -> void:
 		if str(Project.state().get("last", "")) == path:
 			Project.forget_last() # don't try the same file on every start
 		return
+	_trace("midi read ok")
 	_stop()
+	_trace("playback stopped")
 	song = s
 	project = Project.open_for(path)
+	_trace("saved project read")
 	for name in project.extra_tracks:
 		song.add_empty_track(str(name))
+	_trace("extra tracks added")
 	song.apply_edits(project.edits)
 	song.drop_empty(project.extra_tracks)
 	if project.fresh:
@@ -389,17 +395,24 @@ func open_song(path: String) -> void:
 		for t in song.tracks:
 			if t.drums and Song.distinct_pitches(t) > 1:
 				project.splits[t.origin] = "drums"
+	_trace("edits applied")
 	song.apply_splits(project.splits)
+	_trace("splits applied")
 	for t in song.tracks:
 		if t.auto_name == "":
 			t.auto_name = t.name
 		if project.renames.has(t.auto_name) and str(project.renames[t.auto_name]) != "":
 			t.name = str(project.renames[t.auto_name])
 	Importer.unique_names(song)
+	_trace("names set")
 	song.reorder(project.look.order)
+	_trace("tracks ordered")
 	_default_part_looks()
+	_trace("part looks set")
 	_reset_toggles()
+	_trace("toggles reset")
 	Project.remember(path)
+	_trace("remembered")
 	_apply_project()
 
 ## The preview shows the whole 16:9 picture, or just its middle square when
@@ -411,6 +424,26 @@ func _apply_square() -> void:
 	_vp.size_2d_override = Vector2i(1080, 1080) if sq else Vector2i(1920, 1080)
 	vis.position = Vector2(-420, 0) if sq else Vector2.ZERO
 	(_frame as AspectRatioContainer).ratio = 1.0 if sq else 16.0 / 9.0
+
+## A second thread writes user://heartbeat.log once a second: how long the
+## main loop has been silent, the frame count and the playback time. If the
+## window freezes, the last lines say when, and where in the song.
+var _beat_ms := 0
+var _hb: Thread
+var _hb_on := true
+
+func _heartbeat() -> void:
+	var f := FileAccess.open("user://heartbeat.log", FileAccess.WRITE)
+	if f == null:
+		return
+	var t0 := Time.get_ticks_msec()
+	while _hb_on:
+		OS.delay_msec(1000)
+		var now := Time.get_ticks_msec()
+		f.store_line("%6d s  silent %5d ms  frame %d  playing %s  at %.1f s  video %d MB" % [(now - t0) / 1000,
+				now - _beat_ms if _beat_ms > 0 else 0, Engine.get_frames_drawn(), playing, _clock,
+				int(Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED)) / 1048576])
+		f.flush()
 
 ## A line in user://load_trace.log: how long each step of opening a song took
 ## and how much memory the app held then (to find what makes a start slow).
@@ -559,6 +592,7 @@ func _preview_at(t: float) -> void:
 	_update_transport()
 
 func _process(delta: float) -> void:
+	_beat_ms = Time.get_ticks_msec()
 	if not playing:
 		return
 	var t: float
@@ -1620,6 +1654,8 @@ func _on_export_finished(ok: bool, message: String) -> void:
 		_status.text = message
 
 func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE and _hb != null:
+		_hb_on = false
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		_save_now()
 		if _render_pid >= 0:

@@ -53,3 +53,5 @@ echo "app ended on its own after ${T}s" | tee -a "$LOG"
 # the app's own step-by-step load trace (what took the time, and the memory then)
 T=$(find "$HOME/Library/Application Support" -name load_trace.log -maxdepth 4 2>/dev/null | head -1)
 [ -n "$T" ] && cp "$T" "$PWD/watched_run_trace.log" && echo "copied the load trace to watched_run_trace.log"
+H=$(find "$HOME/Library/Application Support" -name heartbeat.log -maxdepth 4 2>/dev/null | head -1)
+[ -n "$H" ] && cp "$H" "$PWD/watched_run_heartbeat.log" && echo "copied the heartbeat to watched_run_heartbeat.log"

@@ -103,5 +103,7 @@ common/enable_pause_aware_picking=true
 
 textures/vram_compression/import_etc2_astc=true
 
-renderer/rendering_method="gl_compatibility"
+renderer/rendering_method="mobile"
+renderer/rendering_method.mobile="gl_compatibility"
+rendering_device/fallback_to_opengl3=true
 environment/default_environment="res://default_env.tres"

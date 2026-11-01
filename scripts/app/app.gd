@@ -441,13 +441,38 @@ func _load_audio(path: String) -> void:
 			elif low.ends_with(".ogg"):
 				_stream = AudioStreamOggVorbis.load_from_buffer(bytes)
 			elif low.ends_with(".wav"):
-				_stream = AudioStreamWAV.load_from_buffer(bytes)
+				_stream = _load_wav(path, bytes)
 			if _stream == null:
 				_flash("That sound file couldn't be read.")
 		if _stream == null:
 			project.audio = ""
 		player.stream = _stream
 	_rebuild_scene()
+
+## A WAV file. Godot reads 16-bit WAVs at once but takes minutes over the
+## 24-bit ones Logic bounces, so those are turned into a 16-bit copy by ffmpeg
+## first (about a second, and kept, so the next start is instant).
+func _load_wav(path: String, bytes: PackedByteArray) -> AudioStreamWAV:
+	var bits := 16
+	var i := 12
+	while i + 8 <= bytes.size():
+		if bytes.slice(i, i + 4).get_string_from_ascii() == "fmt ":
+			bits = bytes.decode_u16(i + 22) if bytes.decode_u16(i + 8) == 1 else 0
+			break
+		i += 8 + bytes.decode_u32(i + 4) + (bytes.decode_u32(i + 4) & 1)
+	var ff := Exporter.ffmpeg_path()
+	if bits == 16 or ff == "":
+		return AudioStreamWAV.load_from_buffer(bytes)
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("user://audio_cache"))
+	var key := ("%s|%d|%d" % [path, bytes.size(), FileAccess.get_modified_time(path)]).md5_text()
+	var copy := ProjectSettings.globalize_path("user://audio_cache/%s.wav" % key)
+	if not FileAccess.file_exists(copy):
+		OS.execute(ff, ["-y", "-loglevel", "error", "-i", path, "-vn", "-c:a", "pcm_s16le", copy])
+	if FileAccess.file_exists(copy):
+		var s := AudioStreamWAV.load_from_buffer(FileAccess.get_file_as_bytes(copy))
+		if s != null:
+			return s
+	return AudioStreamWAV.load_from_buffer(bytes)
 
 func _length() -> float:
 	var l := song.length if song else 0.0

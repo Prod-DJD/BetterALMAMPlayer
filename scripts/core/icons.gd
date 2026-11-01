@@ -212,14 +212,42 @@ static func draw(ci: CanvasItem, kind: String, rect: Rect2, color: Color) -> voi
 					ci.draw_circle(pts[0], pw / 2.0, color)
 					ci.draw_circle(pts[pts.size() - 1], pw / 2.0, color)
 			"f":
-				var flat: Array = s[1]
+				# split into triangles once, at the icon's own scale (done again
+				# at every size, it could fail on rounding and log an error on
+				# every frame)
+				var tri: Array = _fill_cache(s)
+				if tri.is_empty():
+					continue
 				var pts := PackedVector2Array()
-				for i in range(0, flat.size(), 2):
-					pts.append(o + Vector2(flat[i], flat[i + 1]) * u)
-				if pts.size() >= 3:
-					ci.draw_colored_polygon(pts, Color(color.r, color.g, color.b, color.a * s[2]))
+				for q: Vector2 in tri[0]:
+					pts.append(o + q * u)
+				var c := Color(color.r, color.g, color.b, color.a * s[2])
+				RenderingServer.canvas_item_add_triangle_array(ci.get_canvas_item(), tri[1], pts,
+						PackedColorArray([c]))
 			"c":
 				ci.draw_circle(o + Vector2(s[1], s[2]) * u, s[3] * u, Color(color.r, color.g, color.b, color.a * s[4]))
 			"r":
 				var rw: float = w * s[4]
 				ci.draw_arc(o + Vector2(s[1], s[2]) * u, s[3] * u, 0.0, TAU, 32, color, rw, true)
+
+static var _fills := {}
+
+## A fill's points (at unit size) and its triangles, worked out once. Empty if
+## the shape can't be split into triangles.
+static func _fill_cache(s: Array) -> Array:
+	var key: Array = s[1]
+	var hit = _fills.get(key)
+	if hit != null:
+		return hit
+	var pts := PackedVector2Array()
+	for i in range(0, key.size(), 2):
+		pts.append(Vector2(key[i], key[i + 1]))
+	var idx := Geometry2D.triangulate_polygon(pts) if pts.size() >= 3 else PackedInt32Array()
+	if idx.is_empty() and pts.size() >= 3:
+		# a shape that touches itself: fill its outline's hull instead
+		pts = Geometry2D.convex_hull(pts)
+		pts.remove_at(pts.size() - 1)
+		idx = Geometry2D.triangulate_polygon(pts)
+	var out := [pts, idx] if not idx.is_empty() else []
+	_fills[key] = out
+	return out

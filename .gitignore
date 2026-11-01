@@ -20,3 +20,5 @@ Untitled.txt
 
 # token files (Untitled*.txt): never commit
 Untitled*.txt
+watched_run.log
+watched_run.out

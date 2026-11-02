@@ -259,8 +259,12 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 	if audio != "" and FileAccess.file_exists(audio):
 		# the audio starts when the song does (plus its delay), after the lead-in
 		var at := LEAD + look.audio_offset
+		# The delay is written into the sound itself, as silence at its start.
+		# (A timestamp offset, as before, is ignored by Premiere Pro: it played the
+		# sound from the very start while the notes waited.)
 		if at >= 0.0:
-			args.append_array(["-itsoffset", "%.4f" % at, "-i", audio])
+			args.append_array(["-i", audio])
+			args.append_array(["-af", "adelay=%d:all=1" % roundi(at * 1000.0)])
 		else:
 			args.append_array(["-ss", "%.4f" % -at, "-i", audio])
 		args.append_array(["-map", "0:v", "-map", "1:a"])

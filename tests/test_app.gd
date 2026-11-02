@@ -443,5 +443,23 @@ func _initialize() -> void:
 	esc.pressed = true
 	app._unhandled_input(esc)
 	check(app.selected_tracks.is_empty(), "Esc deselects every track")
+	# ---- the right panel shows the selected track's own settings
+	app.toggle_track_selected(1, false)
+	check(app._track_box.visible and not app._scene_box.visible, "selecting a track swaps the scene panel for its own settings")
+	var pt_tl: Look.TrackLook = app.project.look.track_look(app.song.tracks[1].name, 1, app.song.tracks.size())
+	pt_tl.parallax = 1.0
+	app._rebuild_track_panel()
+	var pt_depth: SpinBox = null
+	for row in app._track_box.get_children():
+		if row is HBoxContainer and row.get_child_count() == 2 and row.get_child(0) is Label and row.get_child(0).text == "Depth":
+			pt_depth = row.get_child(1)
+	check(pt_depth != null and absf(pt_depth.value - 1.0) < 0.001, "the track panel shows that track's depth")
+	pt_depth.value = 2.5
+	check(absf(pt_tl.parallax - 2.5) < 0.001, "changing it in the panel changes the track's look")
+	pt_tl.color = Color(0.9, 0.1, 0.1)
+	app._changed()
+	check(app._editor.canvas.look.track_look(app.song.tracks[1].name, 1, app.song.tracks.size()).color == Color(0.9, 0.1, 0.1), "a colour change is seen by the note editor at once")
+	app.toggle_track_selected(1, false)
+	check(app.selected_tracks.is_empty() and app._scene_box.visible and not app._track_box.visible, "deselecting brings the scene's settings back")
 	print("FAILS: ", fails)
 	quit(1 if fails else 0)

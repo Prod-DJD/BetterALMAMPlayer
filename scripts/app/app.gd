@@ -317,6 +317,12 @@ func _build() -> void:
 	scene_pad.size_flags_horizontal = SIZE_EXPAND_FILL
 	scene_pad.add_theme_constant_override("margin_right", 12)
 	scene_pad.add_child(_scene_box)
+	# shown instead of the scene while tracks are selected: that track's own settings
+	_track_box = VBoxContainer.new()
+	_track_box.size_flags_horizontal = SIZE_EXPAND_FILL
+	_track_box.add_theme_constant_override("separation", 6)
+	_track_box.visible = false
+	scene_pad.add_child(_track_box)
 	rs.add_child(scene_pad)
 
 	player = AudioStreamPlayer.new()
@@ -694,6 +700,14 @@ func _changed(textures := false) -> void:
 	if textures:
 		vis.refresh()
 	vis.queue_redraw()
+	# the note editor draws the same colours: redraw it too, so a change shows at once
+	if _editor != null and _editor.canvas != null:
+		_editor.canvas.queue_redraw()
+	# and the track rows' icons take the new colour
+	if _tracks_box != null:
+		for c in _tracks_box.get_children():
+			if c is TrackRow:
+				c.refresh_color()
 	if project:
 		_status.text = "Saving…"
 		_save_timer.start()
@@ -791,6 +805,129 @@ func _rebuild_tracks() -> void:
 		row.setup(self, tr, project.look.track_look(tr.name, i, n), i)
 		_tracks_box.add_child(row)
 		row.set_selected(selected_tracks.has(i))
+	_rebuild_track_panel()
+
+var _track_box: VBoxContainer
+
+## The right panel while tracks are selected: each setting of the selected
+## track (or of all of them, when several are selected, and a change applies to
+## every one). The scene's settings come back when nothing is selected.
+func _rebuild_track_panel() -> void:
+	if _track_box == null:
+		return
+	var picked: Array = selected_tracks.filter(func(i): return song != null and i >= 0 and i < song.tracks.size())
+	_scene_box.visible = picked.is_empty()
+	_track_box.visible = not picked.is_empty()
+	for c in _track_box.get_children():
+		c.queue_free()
+	if picked.is_empty() or project == null:
+		return
+	var first: int = picked[0]
+	var tr: Song.Track = song.tracks[first]
+	var head := Label.new()
+	head.text = tr.name if picked.size() == 1 else "%d tracks selected" % picked.size()
+	head.add_theme_font_size_override("font_size", 16)
+	head.clip_text = true
+	head.tooltip_text = head.text
+	_track_box.add_child(head)
+	var hint := Label.new()
+	hint.text = "Changes apply to every selected track." if picked.size() > 1 else "Click the track again (or Esc) to get the scene back."
+	hint.add_theme_font_size_override("font_size", 12)
+	hint.add_theme_color_override("font_color", Color(1, 1, 1, 0.45))
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint.custom_minimum_size.x = 1
+	_track_box.add_child(hint)
+
+	# each control shows the first selected track's value and sets it on all
+	var tl0: Look.TrackLook = project.look.track_look(tr.name, first, song.tracks.size())
+	var color := ColorPickerButton.new()
+	color.color = tl0.color
+	color.custom_minimum_size = Vector2(34, 26)
+	color.edit_alpha = false
+	color.color_changed.connect(func(c):
+		for i in picked:
+			_track_look_of(i).color = c
+		_changed())
+	_track_box.add_child(_row("Color", color))
+	var depth := SpinBox.new()
+	depth.min_value = 0.1
+	depth.max_value = 4.0
+	depth.step = 0.02
+	depth.value = tl0.parallax
+	depth.suffix = "×"
+	depth.tooltip_text = "How fast this track moves (more is faster). The list's order sets who is in front."
+	depth.value_changed.connect(func(x):
+		for i in picked:
+			_track_look_of(i).parallax = x
+		_changed())
+	_track_box.add_child(_row("Depth", depth))
+	var shape := OptionButton.new()
+	for s in ["Pill", "Soft", "Sharp"]:
+		shape.add_item(s)
+	shape.selected = tl0.shape
+	shape.item_selected.connect(func(s):
+		for i in picked:
+			_track_look_of(i).shape = s
+		_changed())
+	_track_box.add_child(_row("Shape", shape))
+	var dots := CheckBox.new()
+	dots.button_pressed = tl0.staccato
+	dots.text = "Short dots"
+	dots.toggled.connect(func(on):
+		for i in picked:
+			_track_look_of(i).staccato = on
+		_changed())
+	_track_box.add_child(_row("Notes", dots))
+	var shown := CheckBox.new()
+	shown.button_pressed = tl0.visible
+	shown.text = "Show in the preview"
+	shown.toggled.connect(func(on):
+		for i in picked:
+			_track_look_of(i).visible = on
+		_changed())
+	_track_box.add_child(_row("Track", shown))
+	var low := SpinBox.new()
+	var high := SpinBox.new()
+	for box in [low, high]:
+		box.min_value = 0
+		box.max_value = 127
+		box.custom_minimum_size.x = 80
+	low.value = tl0.low
+	high.value = tl0.high
+	low.value_changed.connect(func(x):
+		for i in picked:
+			var t := _track_look_of(i)
+			t.low = int(x)
+			t.high = maxi(t.high, t.low)
+		high.set_value_no_signal(_track_look_of(first).high)
+		_changed())
+	high.value_changed.connect(func(x):
+		for i in picked:
+			var t := _track_look_of(i)
+			t.high = int(x)
+			t.low = mini(t.low, t.high)
+		low.set_value_no_signal(_track_look_of(first).low)
+		_changed())
+	var range_row := HBoxContainer.new()
+	range_row.add_child(low)
+	range_row.add_child(high)
+	_track_box.add_child(_row("Notes from / to", range_row))
+
+## The look of track position [i] (its saved look, made if it wasn't).
+func _track_look_of(i: int) -> Look.TrackLook:
+	var tr: Song.Track = song.tracks[i]
+	return project.look.track_look(tr.name, i, song.tracks.size())
+
+## A label on the left and a control on the right, for the track panel.
+func _row(label: String, control: Control) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	var l := Label.new()
+	l.text = label
+	l.custom_minimum_size.x = 110
+	row.add_child(l)
+	control.size_flags_horizontal = SIZE_EXPAND_FILL
+	row.add_child(control)
+	return row
 
 ## The tracks selected in the list (their positions), outlined in it.
 var selected_tracks: Array[int] = []
@@ -820,6 +957,7 @@ func _show_track_selection() -> void:
 	for c in _tracks_box.get_children():
 		if c is TrackRow:
 			c.set_selected(selected_tracks.has(c.index))
+	_rebuild_track_panel()
 	_status.text = "%d track%s selected" % [selected_tracks.size(), "" if selected_tracks.size() == 1 else "s"] if selected_tracks.size() > 0 else _status.text
 
 ## Moves track [from] to position [to] in the list, the song and the scene.

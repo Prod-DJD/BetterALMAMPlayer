@@ -151,9 +151,15 @@ func _build() -> void:
 	for side in ["left", "right", "top", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, 10)
 	add_child(margin)
-	var cols := HBoxContainer.new()
-	cols.add_theme_constant_override("separation", 10)
+	# three panels side by side, with a divider between each pair to drag
+	var cols := HSplitContainer.new() # tracks | (preview | scene)
+	cols.split_offset = int(Project.state().get("panel_left", 380))
 	margin.add_child(cols)
+	var inner := HSplitContainer.new() # preview | scene
+	inner.split_offset = -int(Project.state().get("panel_right", 300))
+	inner.dragged.connect(func(_off): _remember_panels())
+	cols.add_child(inner)
+	cols.dragged.connect(func(_off): _remember_panels())
 
 	# left: tracks
 	var left := _panel("Tracks")
@@ -190,7 +196,7 @@ func _build() -> void:
 	var mid := VBoxContainer.new()
 	mid.size_flags_horizontal = SIZE_EXPAND_FILL
 	mid.add_theme_constant_override("separation", 8)
-	cols.add_child(mid)
+	inner.add_child(mid)
 	var top := HBoxContainer.new()
 	_top = top
 	mid.add_child(top)
@@ -305,7 +311,7 @@ func _build() -> void:
 	var right := _panel("Scene")
 	_right = right
 	right.custom_minimum_size.x = 300
-	cols.add_child(right)
+	inner.add_child(right)
 	var rs := ScrollContainer.new()
 	rs.size_flags_vertical = SIZE_EXPAND_FILL
 	rs.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -328,6 +334,15 @@ func _build() -> void:
 	player = AudioStreamPlayer.new()
 	add_child(player)
 	player.finished.connect(func(): pass)
+
+## Keeps the panels' widths for the next start (the window's own size is kept by the OS).
+func _remember_panels() -> void:
+	var s := Project.state()
+	var inner := _right.get_parent() as HSplitContainer
+	var outer := inner.get_parent() as HSplitContainer
+	s["panel_left"] = outer.split_offset
+	s["panel_right"] = -inner.split_offset
+	Project.save_state(s)
 
 func _panel(title: String) -> PanelContainer:
 	var p := PanelContainer.new()

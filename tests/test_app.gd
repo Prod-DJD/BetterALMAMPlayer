@@ -461,5 +461,10 @@ func _initialize() -> void:
 	check(app._editor.canvas.look.track_look(app.song.tracks[1].name, 1, app.song.tracks.size()).color == Color(0.9, 0.1, 0.1), "a colour change is seen by the note editor at once")
 	app.toggle_track_selected(1, false)
 	check(app.selected_tracks.is_empty() and app._scene_box.visible and not app._track_box.visible, "deselecting brings the scene's settings back")
+	# ---- the three panels can be resized
+	check(app._right.get_parent() is HSplitContainer and app._right.get_parent().get_parent() is HSplitContainer, "the scene panel sits in a resizable split")
+	check(app._editor.get_parent() is HSplitContainer or app._editor.get_parent().get_parent() is HSplitContainer, "the preview sits in a resizable split")
+	app._remember_panels()
+	check(Project.state().has("panel_left") and Project.state().has("panel_right"), "the panel widths are remembered")
 	print("FAILS: ", fails)
 	quit(1 if fails else 0)

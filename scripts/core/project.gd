@@ -121,6 +121,12 @@ func save() -> void:
 
 # ----- the app's own memory: last song, recent songs -----
 
+## Writes the app's own memory (the whole dictionary).
+static func save_state(s: Dictionary) -> void:
+	var f := FileAccess.open(STATE, FileAccess.WRITE)
+	if f:
+		f.store_string(JSON.stringify(s, "\t"))
+
 static func state() -> Dictionary:
 	if FileAccess.file_exists(STATE):
 		var d = JSON.parse_string(FileAccess.get_file_as_string(STATE))

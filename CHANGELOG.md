@@ -5,6 +5,7 @@
 - Selecting a track in the list shows that track's own settings on the right (colour, depth, shape, dots, show in preview, and its note range), in place of the scene's sliders. With several tracks selected, a change applies to all of them. Deselecting brings the scene back.
 - Colour changes show at once in the note editor and in the track list, not only after the next redraw.
 - The colour popup closes when you copy its hex code (Ctrl/Cmd+C in the hex box).
+- The three panels (tracks, preview, scene) can be resized by dragging the dividers between them. Their widths are remembered between starts.
 
 - Fixed selecting tracks in the list. A click on a track's row now selects just that track (Ctrl/Cmd-click adds or removes one, a click on the only selected track deselects it, Ctrl/Cmd+A selects all, Esc clears). In 1.0.9 only Ctrl+A worked: a plain click was ignored, and would have failed even if it had registered. A hint under the track buttons lists the keys.
 

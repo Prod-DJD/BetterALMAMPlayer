@@ -121,22 +121,6 @@ func setup(the_app, t: Song.Track, look: Look.TrackLook, i := 0) -> void:
 	shape.tooltip_text = "Note shape"
 	shape.item_selected.connect(func(s): tl.shape = s; app._changed())
 	row2.add_child(shape)
-	var low := SpinBox.new()
-	var high := SpinBox.new()
-	for box in [low, high]:
-		box.min_value = 0
-		box.max_value = 127
-		box.custom_minimum_size.x = 70
-	low.value = tl.low
-	high.value = tl.high
-	low.prefix = "low "
-	low.tooltip_text = "Lowest note this track shows (60 is middle C). Notes below are hidden, not deleted."
-	low.value_changed.connect(func(x): tl.low = int(x); tl.high = maxi(tl.high, tl.low); high.value = tl.high; app._changed())
-	row2.add_child(low)
-	high.prefix = "high "
-	high.tooltip_text = "Highest note this track shows. Notes above are hidden, not deleted."
-	high.value_changed.connect(func(x): tl.high = int(x); tl.low = mini(tl.low, tl.high); low.value = tl.low; app._changed())
-	row2.add_child(high)
 	var stacc := CheckBox.new()
 	stacc.text = "Dots"
 	stacc.button_pressed = tl.staccato

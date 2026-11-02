@@ -451,7 +451,7 @@ func _initialize() -> void:
 	app._rebuild_track_panel()
 	var pt_depth: SpinBox = null
 	for row in app._track_box.get_children():
-		if row is HBoxContainer and row.get_child_count() == 2 and row.get_child(0) is Label and row.get_child(0).text == "Depth":
+		if row is VBoxContainer and row.get_child_count() == 2 and row.get_child(0) is Label and row.get_child(0).text == "Depth":
 			pt_depth = row.get_child(1)
 	check(pt_depth != null and absf(pt_depth.value - 1.0) < 0.001, "the track panel shows that track's depth")
 	pt_depth.value = 2.5
@@ -466,5 +466,10 @@ func _initialize() -> void:
 	check(app._editor.get_parent() is HSplitContainer or app._editor.get_parent().get_parent() is HSplitContainer, "the preview sits in a resizable split")
 	app._remember_panels()
 	check(Project.state().has("panel_left") and Project.state().has("panel_right"), "the panel widths are remembered")
+	# ---- the panels always fit in the smallest window
+	var lay_inner: Control = app._right.get_parent()
+	var lay_sum: float = app._left.get_combined_minimum_size().x + lay_inner.get_child(0).get_combined_minimum_size().x + app._right.get_combined_minimum_size().x
+	check(lay_sum + 80.0 <= app.get_window().min_size.x, "the three panels at their smallest (%d px, with margins) fit the window's minimum width (%d px)" % [lay_sum + 80.0, app.get_window().min_size.x])
+	check(app._left.get_combined_minimum_size().x <= 400.0, "a track row doesn't force the tracks panel wider than it is meant to be (%d px)" % app._left.get_combined_minimum_size().x)
 	print("FAILS: ", fails)
 	quit(1 if fails else 0)

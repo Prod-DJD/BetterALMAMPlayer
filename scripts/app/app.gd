@@ -51,7 +51,7 @@ var _export_btn: Button
 var _seeking := false
 
 func _ready() -> void:
-	get_window().min_size = Vector2i(1100, 640)
+	get_window().min_size = Vector2i(1200, 680) # the three panels, side by side, at their smallest
 	if OS.has_feature("mobile"):
 		# the window is laid out for a desktop: show it scaled to fit a landscape screen
 		var win := get_window()
@@ -196,10 +196,12 @@ func _build() -> void:
 	# middle: title, preview, transport, export
 	var mid := VBoxContainer.new()
 	mid.size_flags_horizontal = SIZE_EXPAND_FILL
-	mid.custom_minimum_size.x = 460 # the dividers can't squeeze the preview and its buttons narrower than this
+	mid.custom_minimum_size.x = 420 # the dividers can't squeeze the preview and its buttons narrower than this
 	mid.add_theme_constant_override("separation", 8)
 	inner.add_child(mid)
-	var top := HBoxContainer.new()
+	var top := HFlowContainer.new() # wraps to a second line when the column is narrow, never cuts anything off
+	top.add_theme_constant_override("h_separation", 8)
+	top.add_theme_constant_override("v_separation", 6)
 	_top = top
 	mid.add_child(top)
 	top.add_child(_button("Open…", _open_dialog, "A MIDI or an FL Studio / Ableton project, its sound, a background, or a look (or drop them here)"))
@@ -210,8 +212,7 @@ func _build() -> void:
 	recent.get_popup().id_pressed.connect(func(i): open_song(Project.recent()[i]))
 	top.add_child(recent)
 	_title = Label.new()
-	_title.size_flags_horizontal = SIZE_EXPAND_FILL
-	_title.custom_minimum_size.x = 60 # shrinks before the buttons beside it do, and never shows a cut-off word
+	_title.custom_minimum_size.x = 150 # room for a usual name; a longer one is trimmed with an ellipsis
 	_title.clip_text = true
 	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -225,7 +226,7 @@ func _build() -> void:
 	top.add_child(_edit_btn)
 	_status = Label.new()
 	_status.add_theme_color_override("font_color", TEXT_DIM)
-	_status.custom_minimum_size.x = 150 # a long message trims; it never widens the window
+	_status.custom_minimum_size.x = 110 # a long message trims; it never widens the window
 	_status.clip_text = true
 	_status.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -863,7 +864,7 @@ func _rebuild_track_panel() -> void:
 	var color := ColorPickerButton.new()
 	TrackRow.close_on_hex_copy(color)
 	color.color = tl0.color
-	color.custom_minimum_size = Vector2(34, 26)
+	color.custom_minimum_size = Vector2(0, 28)
 	color.edit_alpha = false
 	color.color_changed.connect(func(c):
 		for i in picked:
@@ -930,6 +931,10 @@ func _rebuild_track_panel() -> void:
 		low.set_value_no_signal(_track_look_of(first).low)
 		_changed())
 	var range_row := HBoxContainer.new()
+	range_row.add_theme_constant_override("separation", 6)
+	for box in [low, high]:
+		box.custom_minimum_size.x = 0
+		box.size_flags_horizontal = SIZE_EXPAND_FILL
 	range_row.add_child(low)
 	range_row.add_child(high)
 	_track_box.add_child(_row("Notes from / to", range_row))
@@ -939,16 +944,20 @@ func _track_look_of(i: int) -> Look.TrackLook:
 	var tr: Song.Track = song.tracks[i]
 	return project.look.track_look(tr.name, i, song.tracks.size())
 
-## A label on the left and a control on the right, for the track panel.
-func _row(label: String, control: Control) -> HBoxContainer:
-	var row := HBoxContainer.new()
+## A small label above a control that fills the panel's width, for the track
+## panel (side by side they were wider than the panel and ran off its edge).
+func _row(label: String, control: Control) -> VBoxContainer:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 2)
 	var l := Label.new()
 	l.text = label
-	l.custom_minimum_size.x = 110
-	row.add_child(l)
+	l.add_theme_font_size_override("font_size", 12)
+	l.add_theme_color_override("font_color", Color(1, 1, 1, 0.6))
+	box.add_child(l)
 	control.size_flags_horizontal = SIZE_EXPAND_FILL
-	row.add_child(control)
-	return row
+	control.custom_minimum_size.x = 0
+	box.add_child(control)
+	return box
 
 ## The tracks selected in the list (their positions), outlined in it.
 var selected_tracks: Array[int] = []

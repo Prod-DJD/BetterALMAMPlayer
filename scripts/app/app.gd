@@ -196,6 +196,8 @@ func _build() -> void:
 	top.add_child(recent)
 	_title = Label.new()
 	_title.size_flags_horizontal = SIZE_EXPAND_FILL
+	_title.custom_minimum_size.x = 60 # shrinks before the buttons beside it do, and never shows a cut-off word
+	_title.clip_text = true
 	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_title.add_theme_font_size_override("font_size", 18)
@@ -474,6 +476,8 @@ func _apply_project() -> void:
 	_load_audio(project.audio)
 	_trace("audio: done")
 	_title.text = project.midi.get_file().get_basename()
+	_title.tooltip_text = _title.text # the whole name, when the bar is too narrow for it
+	get_window().title = "ALMAMPlayer · " + _title.text
 	_rebuild_tracks()
 	_trace("track list: done")
 	_rebuild_scene()

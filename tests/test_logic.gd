@@ -60,10 +60,10 @@ func _initialize() -> void:
 	check(LogicReader._region_window([region(cluster, 99, 7), region(cluster, 1440, 480)], cluster) == [1440, 480], "the last region record wins too")
 	var song := PackedByteArray(); song.resize(0x200)
 	song.encode_u32(LogicReader.SONG_START_A, 0x7f80); song.encode_u32(LogicReader.SONG_START_B, 0x7f80)
-	check(LogicReader._origin([{"tag": "gnoS", "raw": song}]) == 0x7f80, "bar 1 comes from the project's own start position")
+	check(LogicReader._upbeat_ticks([{"tag": "gnoS", "raw": song}]) == 1920, "a project that starts 2 beats before bar 1 has a 1920-tick upbeat")
 	var odd := PackedByteArray(); odd.resize(0x200)
 	odd.encode_u32(LogicReader.SONG_START_A, 0x7f80); odd.encode_u32(LogicReader.SONG_START_B, 0x1234)
-	check(LogicReader._origin([{"tag": "gnoS", "raw": odd}]) == LogicReader.AUDIO_REGION_ORIGIN and LogicReader._origin([]) == LogicReader.AUDIO_REGION_ORIGIN, "no usable start position: the usual one")
+	check(LogicReader._upbeat_ticks([{"tag": "gnoS", "raw": odd}]) == 0 and LogicReader._upbeat_ticks([]) == 0, "no usable start position: no upbeat")
 	var sample := OS.get_environment("LOGIC_SAMPLE")
 	if sample == "":
 		print("sample project skipped: set LOGIC_SAMPLE to a .logicx folder")

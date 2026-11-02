@@ -37,6 +37,43 @@ var snap_beats := 0.25
 ## Show the other tracks' notes behind the one being edited.
 var show_others := true
 var selected: Array[Song.Note] = []
+## Edit notes from several tracks at once: the tracks selected in the list,
+## else every track. Off: only the track being edited.
+var all_tracks := false
+## How far before the start a note can be moved (the upbeat; the preview starts here).
+const MIN_START := -1.0
+
+## The positions of the tracks whose notes can be picked and edited together.
+func edit_indices() -> Array:
+	if song == null:
+		return []
+	if not all_tracks:
+		return [track_index]
+	var picked: Array = []
+	if app and app.get("selected_tracks") != null:
+		picked = app.selected_tracks.filter(func(i): return i >= 0 and i < song.tracks.size())
+	if not picked.is_empty():
+		return picked
+	var every := []
+	for i in song.tracks.size():
+		every.append(i)
+	return every
+
+## Every note of the tracks being edited.
+func edit_notes() -> Array[Song.Note]:
+	var out: Array[Song.Note] = []
+	for i in edit_indices():
+		out.append_array(song.tracks[i].notes)
+	return out
+
+## What to save before a change, as one undo step: the tracks being edited.
+func _snapshot() -> Dictionary:
+	if not all_tracks:
+		return {"track": track_index, "notes": _dump(track())}
+	var entries := []
+	for i in edit_indices():
+		entries.append({"track": i, "notes": _dump(song.tracks[i])})
+	return {"multi": entries}
 
 var _undo: Array = []
 var _redo: Array = []
@@ -162,8 +199,9 @@ func _draw() -> void:
 	# notes stacked on top of each other (several tracks playing the same
 	# thing) can't pile up into something that looks like a note you can pick
 	var count := song.tracks.size()
+	var editing := edit_indices()
 	for i in count:
-		if i == track_index or not show_others:
+		if i in editing or not show_others:
 			continue
 		var tr: Song.Track = song.tracks[i]
 		var col: Color = look.track_look(tr.name, i, count).color
@@ -177,9 +215,10 @@ func _draw() -> void:
 			draw_rect(r, edge, false, 1.0)
 	# the active track
 	var active := track()
-	if active:
-		var base: Color = look.track_look(active.name, track_index, count).color
-		for n in active.notes:
+	for ti in editing:
+		var tr: Song.Track = song.tracks[ti]
+		var base: Color = look.track_look(tr.name, ti, count).color
+		for n in tr.notes:
 			var r := _note_rect(n)
 			if r.end.x < KEYS_W or r.position.x > size.x or r.end.y < RULER_H or r.position.y > size.y:
 				continue
@@ -247,13 +286,13 @@ func _note_rect(n: Song.Note) -> Rect2:
 # ---------------------------------------------------------------- picking
 
 func _note_at(pos: Vector2) -> Song.Note:
-	var tr := track()
-	if tr == null:
-		return null
-	for i in range(tr.notes.size() - 1, -1, -1):
-		var n := tr.notes[i]
-		if _note_rect(n).grow(1.0).has_point(pos):
-			return n
+	var indices := edit_indices()
+	for k in range(indices.size() - 1, -1, -1):
+		var tr: Song.Track = song.tracks[indices[k]]
+		for i in range(tr.notes.size() - 1, -1, -1):
+			var n := tr.notes[i]
+			if _note_rect(n).grow(1.0).has_point(pos):
+				return n
 	return null
 
 func _on_edge(n: Song.Note, pos: Vector2) -> bool:
@@ -349,7 +388,7 @@ func _press_left(e: InputEventMouseButton) -> void:
 		_origin.clear()
 		for s in selected:
 			_origin[s] = [s.start, s.end, s.pitch]
-		_pending_undo = {"track": track_index, "notes": _dump(track())}
+		_pending_undo = _snapshot()
 		queue_redraw()
 		return
 	_mode = "box"
@@ -400,7 +439,7 @@ func _drag(pos: Vector2) -> void:
 			lo = mini(lo, _origin[s][2])
 			hi = maxi(hi, _origin[s][2])
 		var delta: float = _snap(o[0] + dt) - o[0]
-		delta = maxf(delta, -min_start)
+		delta = maxf(delta, MIN_START - min_start)
 		var dp := roundi(-(pos.y - _press.y) / row_h)
 		dp = clampi(dp, -lo, 127 - hi)
 		for s in selected:
@@ -424,12 +463,11 @@ func _release_left() -> void:
 	queue_redraw()
 
 func _box_select() -> void:
-	var tr := track()
-	if tr == null:
+	if song == null:
 		return
 	var before: Array = selected.duplicate() if _box_add else []
 	var fresh: Array[Song.Note] = []
-	for n in tr.notes:
+	for n in edit_notes():
 		if _box.intersects(_note_rect(n)) or before.has(n):
 			fresh.append(n)
 	if fresh != selected:
@@ -437,13 +475,12 @@ func _box_select() -> void:
 		selection_changed.emit()
 
 func _select_pitch(p: int, add: bool) -> void:
-	var tr := track()
-	if tr == null:
+	if song == null:
 		return
 	var fresh: Array[Song.Note] = []
 	if add:
 		fresh.append_array(selected)
-	for n in tr.notes:
+	for n in edit_notes():
 		if n.pitch == p and not fresh.has(n):
 			fresh.append(n)
 	selected = fresh
@@ -458,8 +495,8 @@ func _on_key(e: InputEventKey) -> void:
 				delete_selected()
 				accept_event()
 		KEY_A:
-			if cmd and track():
-				selected.assign(track().notes)
+			if cmd and song != null:
+				selected.assign(edit_notes())
 				selection_changed.emit()
 				queue_redraw()
 				accept_event()
@@ -500,7 +537,7 @@ func _dump(tr: Song.Track) -> Array:
 	return out
 
 func _push_undo() -> void:
-	_pending_undo = {"track": track_index, "notes": _dump(track())}
+	_pending_undo = _snapshot()
 	_push_pending_undo()
 
 func _push_pending_undo() -> void:
@@ -589,15 +626,16 @@ func clear_history() -> void:
 	selected.clear()
 
 func delete_selected() -> void:
-	var tr := track()
-	if tr == null or selected.is_empty():
+	if song == null or selected.is_empty():
 		return
 	_push_undo()
-	var kept: Array[Song.Note] = []
-	for n in tr.notes:
-		if not selected.has(n):
-			kept.append(n)
-	tr.notes = kept
+	for ti in edit_indices():
+		var tr: Song.Track = song.tracks[ti]
+		var kept: Array[Song.Note] = []
+		for n in tr.notes:
+			if not selected.has(n):
+				kept.append(n)
+		tr.notes = kept
 	selected.clear()
 	song.refresh()
 	selection_changed.emit()
@@ -637,7 +675,7 @@ func nudge(seconds: float) -> void:
 	var first := 1e9
 	for n in selected:
 		first = minf(first, n.start)
-	seconds = maxf(seconds, -first)
+	seconds = maxf(seconds, MIN_START - first)
 	_push_undo()
 	for n in selected:
 		n.start += seconds

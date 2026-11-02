@@ -9,10 +9,14 @@
 ## plugin settings. Logic's offsets come from reverse engineering: the sample
 ## projects in the converter's tests are the check, and a project's own MIDI
 ## export (File > Export > All Tracks as MIDI File) is the ground truth: a
-## 37-region project read here matches it note for note.
+## 37-region project read here matches it note for note (apart from that upbeat).
 ##
 ## What decides where a note sounds (all found by comparing against that export):
-##  - the project's start position, in the song record, is where bar 1 is;
+##  - time zero is bar 1 (a fixed position in the file). A project can start
+##    earlier, with an upbeat: its start position is kept in the song record,
+##    and what lies before bar 1 is negative time here (a 2-beat upbeat puts
+##    notes at -2 beats). Logic's own MIDI export counts from the project start
+##    instead, so it is later than this by the length of the upbeat;
 ##  - each region starts at its position, begins [offset] ticks into its stored
 ##    notes, and ends [length] ticks after it (notes outside are not played);
 ##  - a note id can be stored twice, the first an empty placeholder: the last wins;
@@ -39,7 +43,7 @@ const KART_MASTER_CHAN := 0x500000
 const PLACEMENT_SIZE := 0x50
 const PLACEMENT_MIDI := 0x20
 const SONG_START_A := 0x164 ## the project's start position, kept twice in the song record
-const SONG_START_B := 0x1b4
+const SONG_START_B := 0x1b4 ## (the upbeat starts here; bar 1 is AUDIO_REGION_ORIGIN)
 const REGION_NAME_LEN := 0x34 ## in a region record: the name's length, then the name
 const REGION_LENGTH := 60 ## from the end of the name (padded to even): the region's length in ticks
 const REGION_OFFSET := 4 ## the same, from the end of the name: ticks into the notes where it begins
@@ -66,7 +70,7 @@ static func read(bundle: String) -> Song:
 			ivne[_u32(r.raw, IVNE_IDX)] = r
 
 	# MIDI placements, by the arrange row they sit on
-	var notes_by_row := _notes_by_row(records, _origin(records))
+	var notes_by_row := _notes_by_row(records, AUDIO_REGION_ORIGIN)
 
 	var song := Song.new()
 	song.path = bundle
@@ -171,15 +175,16 @@ static func _notes_by_row(records: Array, origin: int) -> Dictionary:
 		o += PLACEMENT_SIZE
 	return out
 
-## Where bar 1 is in this project (placement positions count from it): the song
-## record keeps it twice. A project that doesn't (or an odd value) uses the usual one.
-static func _origin(records: Array) -> int:
+## How many ticks the project's start lies before bar 1 (its upbeat), 0 if it
+## starts at bar 1 or the record doesn't say. Notes in that stretch have
+## negative times.
+static func _upbeat_ticks(records: Array) -> int:
 	for r in records:
 		if r.tag == "gnoS":
 			var a := _u32(r.raw, SONG_START_A)
-			if a == _u32(r.raw, SONG_START_B) and a >= 0x4000 and a <= AUDIO_REGION_ORIGIN * 2:
-				return a
-	return AUDIO_REGION_ORIGIN
+			if a == _u32(r.raw, SONG_START_B) and a >= 0x4000 and a < AUDIO_REGION_ORIGIN:
+				return AUDIO_REGION_ORIGIN - a
+	return 0
 
 ## The last record with [param tag] and index [param idx]: an index can be stored
 ## more than once, and the first is an empty placeholder.

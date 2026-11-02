@@ -371,5 +371,54 @@ func _initialize() -> void:
 	check(Exporter.alpha_codec_for("a.webm", "prores") == "vp9" and Exporter.alpha_codec_for("a.mov", "hevc") == "hevc", "a .webm is always VP9; a .mov takes the look's choice")
 	check(Look.from_dict({"export_format": "hevc"}).export_format == "hevc" and Look.from_dict({"export_format": "nope"}).export_format == "mp4" and Look.new().export_format == "mp4", "export format saved; the default is MP4; bad values fall back")
 	check(Exporter.extension_for("mp4") == "mp4" and Exporter.extension_for("prores") == "mov" and Exporter.extension_for("hevc") == "mov" and Exporter.extension_for("webm") == "webm", "each format has its file ending")
+	# ---- editing the notes of several tracks together
+	var mt_mc: NoteCanvas = app._editor.canvas
+	mt_mc.all_tracks = true
+	mt_mc.clear_history()
+	var mt_total := 0
+	for t in app.song.tracks:
+		mt_total += t.notes.size()
+	var mt_starts := []
+	for t in app.song.tracks:
+		mt_starts.append(t.notes[0].start if t.notes.size() > 0 else 0.0)
+	var mt_ctrl_a := InputEventKey.new()
+	mt_ctrl_a.keycode = KEY_A
+	mt_ctrl_a.ctrl_pressed = true
+	mt_ctrl_a.pressed = true
+	mt_mc._on_key(mt_ctrl_a)
+	check(mt_mc.selected.size() == mt_total and app.song.tracks.size() > 1, "Ctrl+A in All tracks selects the notes of every track (%d of %d)" % [mt_mc.selected.size(), mt_total])
+	mt_mc.nudge(-0.5)
+	var mt_moved := true
+	for i in app.song.tracks.size():
+		var t: Song.Track = app.song.tracks[i]
+		if t.notes.size() > 0 and absf(t.notes[0].start - (maxf(mt_starts[i] - 0.5, NoteCanvas.MIN_START))) > 0.51 and mt_starts[i] >= 0.5:
+			mt_moved = false
+	check(mt_moved, "a shift moves the notes of all the tracks together")
+	mt_mc.nudge(-100.0)
+	var mt_earliest := 1e9
+	for t in app.song.tracks:
+		for n in t.notes:
+			mt_earliest = minf(mt_earliest, n.start)
+	check(mt_earliest >= NoteCanvas.MIN_START - 0.001 and mt_earliest < 0.0, "notes can be shifted before the start (the upbeat), down to the floor: %.2f" % mt_earliest)
+	mt_mc.undo()
+	mt_mc.undo()
+	var mt_back := true
+	for i in app.song.tracks.size():
+		var t: Song.Track = app.song.tracks[i]
+		if t.notes.size() > 0 and absf(t.notes[0].start - mt_starts[i]) > 0.001:
+			mt_back = false
+	check(mt_back, "two undos put every track's notes back")
+	mt_mc._on_key(mt_ctrl_a)
+	mt_mc.delete_selected()
+	var mt_left := 0
+	for t in app.song.tracks:
+		mt_left += t.notes.size()
+	check(mt_left == 0, "delete removes the selected notes from every track")
+	mt_mc.undo()
+	var mt_restored := 0
+	for t in app.song.tracks:
+		mt_restored += t.notes.size()
+	check(mt_restored == mt_total, "...and one undo brings them all back (%d)" % mt_restored)
+	mt_mc.all_tracks = false
 	print("FAILS: ", fails)
 	quit(1 if fails else 0)

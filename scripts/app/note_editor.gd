@@ -55,6 +55,11 @@ func setup(the_app) -> void:
 	_send.about_to_popup.connect(_fill_send)
 	_send.get_popup().id_pressed.connect(func(id): send_requested.emit(id - 1))
 	bar.add_child(_send)
+	var multi := CheckBox.new()
+	multi.text = "All tracks"
+	multi.tooltip_text = "Pick, select (Ctrl+A) and move notes of several tracks at once: the tracks selected in the list on the left, or every track if none are. Drag or use the arrow keys to shift them all together."
+	multi.toggled.connect(func(on): canvas.all_tracks = on; canvas.selected.clear(); canvas.selection_changed.emit(); canvas.queue_redraw())
+	bar.add_child(multi)
 	var others := CheckBox.new()
 	others.text = "Other tracks"
 	others.button_pressed = true
@@ -125,12 +130,12 @@ func _fill_send() -> void:
 	var menu := _send.get_popup()
 	menu.clear()
 	menu.add_item("A new track", 0)
-	menu.set_item_disabled(0, canvas.selected.is_empty())
+	menu.set_item_disabled(0, canvas.selected.is_empty() or canvas.all_tracks)
 	menu.add_separator()
 	if canvas.song:
 		for i in canvas.song.tracks.size():
 			menu.add_item(canvas.song.tracks[i].name, i + 1)
-			menu.set_item_disabled(menu.get_item_count() - 1, i == canvas.track_index or canvas.selected.is_empty())
+			menu.set_item_disabled(menu.get_item_count() - 1, i == canvas.track_index or canvas.selected.is_empty() or canvas.all_tracks)
 
 func show_track(i: int) -> void:
 	if canvas.song == null or i < 0 or i >= canvas.song.tracks.size():

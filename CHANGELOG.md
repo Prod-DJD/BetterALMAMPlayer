@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.9
+
+- **Logic projects now import in time.** The reader placed regions with a fixed starting point and ignored how each region is cut, so notes drifted and bled past where a region ends. It now follows what Logic itself plays: the project's own start position (the old fixed one was 2 beats off in some projects), each region's length and start offset, muted notes (Logic doesn't play them), notes on every MIDI channel (it skipped all but the first, losing chords' middle voices), and the real note data when a record is stored twice (a copied region came out empty). A 37-region project now matches Logic's own MIDI export on all 2,387 notes, start and end.
+- Tempo changes are still not followed in Logic, FL Studio or Ableton projects (the first tempo is used throughout). The FL Studio and Ableton readers are unchanged and were not checked against their own exports.
+
 ## 1.0.8
 
 - Exports run in the app again, as the original did: no second window or process. Each frame is drawn once, and the export stops if the app's own memory goes past 3 GB or the video's graphics memory past 5 GB.

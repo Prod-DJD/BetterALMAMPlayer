@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.10
+
+- Fixed selecting tracks in the list. A click on a track's row now selects just that track (Ctrl/Cmd-click adds or removes one, a click on the only selected track deselects it, Ctrl/Cmd+A selects all, Esc clears). In 1.0.9 only Ctrl+A worked: a plain click was ignored, and would have failed even if it had registered. A hint under the track buttons lists the keys.
+
 ## 1.0.9
 
 - Track colours are spread evenly around the colour wheel, with neighbours in the list far apart, instead of a gradient. Tracks already coloured keep their colours.

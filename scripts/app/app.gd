@@ -162,6 +162,13 @@ func _build() -> void:
 	cols.add_child(left)
 	var all_row := HFlowContainer.new()
 	left.get_child(0).add_child(all_row)
+	var select_hint := Label.new()
+	select_hint.text = "Click a track to select it · ⌘/Ctrl-click adds · ⌘/Ctrl+A all · Esc clears"
+	select_hint.add_theme_font_size_override("font_size", 12)
+	select_hint.add_theme_color_override("font_color", Color(1, 1, 1, 0.45))
+	select_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	select_hint.custom_minimum_size.x = 1 # wraps to the room there is, never widens the window
+	left.get_child(0).add_child(select_hint)
 	all_row.add_child(_toggle_button("rainbow", "Rainbow", "Colors around the color wheel", func(on): _color_toggle("rainbow", on)))
 	all_row.add_child(_toggle_button("gradient", "Gradient", "Colors from the first track's to the last's", func(on): _color_toggle("gradient", on)))
 	all_row.add_child(_toggle_button("depth", "Depth", "Default speeds (the top tracks faster)", _depth_toggle))
@@ -674,6 +681,11 @@ func _unhandled_input(e: InputEvent) -> void:
 				if _fullscreen:
 					set_fullscreen_preview(false)
 					accept_event()
+				elif not selected_tracks.is_empty():
+					selected_tracks.clear() # Esc deselects every track in the list
+					_show_track_selection()
+					_status.text = "Selection cleared"
+					accept_event()
 
 # ---------------------------------------------------------------- saving
 
@@ -772,7 +784,7 @@ func _rebuild_tracks() -> void:
 	for c in _tracks_box.get_children():
 		c.queue_free()
 	var n := song.tracks.size()
-	selected_tracks = selected_tracks.filter(func(i): return i < n) # positions that no longer exist
+	selected_tracks.assign(selected_tracks.filter(func(i): return i < n)) # positions that no longer exist
 	for i in n:
 		var tr: Song.Track = song.tracks[i]
 		var row := TrackRow.new()
@@ -792,7 +804,10 @@ func toggle_track_selected(i: int, add: bool) -> void:
 		else:
 			selected_tracks.append(i)
 	else:
-		selected_tracks = [] if selected_tracks == [i] else [i]
+		var only_this: bool = selected_tracks == [i]
+		selected_tracks.clear()
+		if not only_this:
+			selected_tracks.append(i)
 	_show_track_selection()
 
 func select_all_tracks() -> void:

@@ -124,9 +124,14 @@ func _gui_input(e: InputEvent) -> void:
 		app.ask_rename(index)
 	elif e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT and not e.double_click:
 		# a click on the row's own background selects it (the controls keep their clicks)
-		var over := get_viewport().gui_get_hovered_control()
-		if over == self or (over is Label and over.get_parent() == self):
+		if is_plain_background(get_viewport().gui_get_hovered_control()):
 			app.toggle_track_selected(index, e.ctrl_pressed or e.meta_pressed or e.shift_pressed)
+
+## True for what is just the row's background or text: the row itself, the
+## layout boxes inside it and labels (so a click there selects the row). Buttons,
+## number boxes, switches, pickers and the icon keep their own clicks.
+static func is_plain_background(c: Control) -> bool:
+	return c == null or c is Container or c is Label or c is PanelContainer
 
 ## Outlines the row when it's selected in the list.
 func set_selected(on: bool) -> void:

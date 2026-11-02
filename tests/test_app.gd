@@ -420,5 +420,28 @@ func _initialize() -> void:
 		mt_restored += t.notes.size()
 	check(mt_restored == mt_total, "...and one undo brings them all back (%d)" % mt_restored)
 	mt_mc.all_tracks = false
+	# ---- picking tracks in the list
+	var sel_btn := Button.new(); var sel_box := HBoxContainer.new(); var sel_lbl := Label.new(); var sel_spin := SpinBox.new()
+	check(TrackRow.is_plain_background(null) and TrackRow.is_plain_background(sel_box) and TrackRow.is_plain_background(sel_lbl), "a click on a row's background, layout boxes or text selects the row")
+	check(not TrackRow.is_plain_background(sel_btn) and not TrackRow.is_plain_background(sel_spin), "buttons and number boxes keep their own clicks")
+	sel_btn.free(); sel_box.free(); sel_lbl.free(); sel_spin.free()
+	app.selected_tracks.clear()
+	app.toggle_track_selected(2, false)
+	check(app.selected_tracks == [2], "a click selects just that track")
+	app.toggle_track_selected(4, true)
+	check(app.selected_tracks == [2, 4], "Ctrl/Cmd-click adds another")
+	app.toggle_track_selected(2, true)
+	check(app.selected_tracks == [4], "Ctrl/Cmd-click on a selected track removes it")
+	app.toggle_track_selected(3, false)
+	check(app.selected_tracks == [3], "a plain click on another track selects only it")
+	app.toggle_track_selected(3, false)
+	check(app.selected_tracks.is_empty(), "a plain click on the only selected track deselects it")
+	app.select_all_tracks()
+	check(app.selected_tracks.size() == app.song.tracks.size(), "select all picks every track")
+	var esc := InputEventKey.new()
+	esc.keycode = KEY_ESCAPE
+	esc.pressed = true
+	app._unhandled_input(esc)
+	check(app.selected_tracks.is_empty(), "Esc deselects every track")
 	print("FAILS: ", fails)
 	quit(1 if fails else 0)

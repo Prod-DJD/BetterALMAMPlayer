@@ -166,6 +166,7 @@ func _build() -> void:
 	_left = left
 	left.custom_minimum_size.x = 380
 	cols.add_child(left)
+	cols.move_child(left, 0) # the tracks are the left column
 	var all_row := HFlowContainer.new()
 	left.get_child(0).add_child(all_row)
 	var select_hint := Label.new()
@@ -195,6 +196,7 @@ func _build() -> void:
 	# middle: title, preview, transport, export
 	var mid := VBoxContainer.new()
 	mid.size_flags_horizontal = SIZE_EXPAND_FILL
+	mid.custom_minimum_size.x = 460 # the dividers can't squeeze the preview and its buttons narrower than this
 	mid.add_theme_constant_override("separation", 8)
 	inner.add_child(mid)
 	var top := HBoxContainer.new()
@@ -312,6 +314,9 @@ func _build() -> void:
 	_right = right
 	right.custom_minimum_size.x = 300
 	inner.add_child(right)
+	# the widths are set once the panels are all in place (a split sets them against its children)
+	cols.split_offset = int(Project.state().get("panel_left", 380))
+	inner.split_offset = -int(Project.state().get("panel_right", 300))
 	var rs := ScrollContainer.new()
 	rs.size_flags_vertical = SIZE_EXPAND_FILL
 	rs.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED

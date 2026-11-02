@@ -135,6 +135,8 @@ func _draw() -> void:
 			i += 1
 			if n.start > to_t:
 				break
+			if n.pitch < tl.low or n.pitch > tl.high:
+				continue
 			var dur: float = n.end - n.start if not tl.staccato else 0.1
 			# the note lets go faster for a hard release (note-off velocity)
 			var release_t := 0.27

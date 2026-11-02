@@ -649,6 +649,12 @@ func _unhandled_input(e: InputEvent) -> void:
 			KEY_TAB:
 				_set_mode(not _editor.visible)
 				accept_event()
+			KEY_A:
+				# Ctrl+A in the preview selects every track in the list (the note
+				# editor keeps its own Ctrl+A for its notes)
+				if (e.meta_pressed or e.ctrl_pressed) and not _editor.visible and song != null:
+					select_all_tracks()
+					accept_event()
 			KEY_Z:
 				if (e.meta_pressed or e.ctrl_pressed) and _editor.visible:
 					if e.shift_pressed:
@@ -762,11 +768,40 @@ func _rebuild_tracks() -> void:
 	for c in _tracks_box.get_children():
 		c.queue_free()
 	var n := song.tracks.size()
+	selected_tracks = selected_tracks.filter(func(i): return i < n) # positions that no longer exist
 	for i in n:
 		var tr: Song.Track = song.tracks[i]
 		var row := TrackRow.new()
 		row.setup(self, tr, project.look.track_look(tr.name, i, n), i)
 		_tracks_box.add_child(row)
+		row.set_selected(selected_tracks.has(i))
+
+## The tracks selected in the list (their positions), outlined in it.
+var selected_tracks: Array[int] = []
+
+## A click on a track's row selects it: alone, or added to the others with
+## Ctrl/Cmd or Shift. A click on a selected row (alone) clears it.
+func toggle_track_selected(i: int, add: bool) -> void:
+	if add:
+		if selected_tracks.has(i):
+			selected_tracks.erase(i)
+		else:
+			selected_tracks.append(i)
+	else:
+		selected_tracks = [] if selected_tracks == [i] else [i]
+	_show_track_selection()
+
+func select_all_tracks() -> void:
+	selected_tracks.clear()
+	for i in song.tracks.size():
+		selected_tracks.append(i)
+	_show_track_selection()
+
+func _show_track_selection() -> void:
+	for c in _tracks_box.get_children():
+		if c is TrackRow:
+			c.set_selected(selected_tracks.has(c.index))
+	_status.text = "%d track%s selected" % [selected_tracks.size(), "" if selected_tracks.size() == 1 else "s"] if selected_tracks.size() > 0 else _status.text
 
 ## Moves track [from] to position [to] in the list, the song and the scene.
 func move_track_to(from: int, to: int) -> void:

@@ -19,11 +19,14 @@ class TrackLook:
 	## Short dots instead of long notes.
 	var staccato := false
 	var visible := true
+	## Only the notes between these pitches are shown (the track's range).
+	var low := 0
+	var high := 127
 
 	func to_dict() -> Dictionary:
 		return {
 			"color": color.to_html(), "parallax": parallax, "shape": shape,
-			"icon": icon, "staccato": staccato, "visible": visible,
+			"icon": icon, "staccato": staccato, "visible": visible, "low": low, "high": high,
 		}
 
 	static func from_dict(d: Dictionary, fallback: TrackLook) -> TrackLook:
@@ -34,6 +37,8 @@ class TrackLook:
 		t.icon = str(d.get("icon", ""))
 		t.staccato = bool(d.get("staccato", false))
 		t.visible = bool(d.get("visible", true))
+		t.low = clampi(int(d.get("low", 0)), 0, 127)
+		t.high = clampi(int(d.get("high", 127)), t.low, 127)
 		return t
 
 ## Pixels a second at parallax 1.
@@ -86,10 +91,21 @@ func track_look(name: String, i: int, count: int) -> TrackLook:
 
 static func default_track(i: int, count: int) -> TrackLook:
 	var t := TrackLook.new()
-	var n: float = max(count, 1)
-	t.color = Color.from_hsv(1.0 / n * i, 0.62 + float(i + 1) / ((n + 1) * 4), 0.92 - float(i + 1) / ((n + 1) * 4))
-	t.parallax = (1.2 / n * (n - i)) + 0.6
+	var n: int = max(count, 1)
+	# the hues spread evenly around the wheel, and neighbours in the list get
+	# hues far apart: step through them by a stride that shares no factor with n
+	var stride := 1
+	for k in range(maxi(int(n * 0.618), 1), 0, -1):
+		if _gcd(k, n) == 1:
+			stride = k
+			break
+	var slot := (i * stride) % n
+	t.color = Color.from_hsv(float(slot) / n, 0.85, 0.95)
+	t.parallax = (1.2 / float(n) * (n - i)) + 0.6
 	return t
+
+static func _gcd(a: int, b: int) -> int:
+	return a if b == 0 else _gcd(b, a % b)
 
 func to_dict() -> Dictionary:
 	var tr := {}

@@ -95,6 +95,22 @@ func setup(the_app, t: Song.Track, look: Look.TrackLook, i := 0) -> void:
 	shape.tooltip_text = "Note shape"
 	shape.item_selected.connect(func(s): tl.shape = s; app._changed())
 	row2.add_child(shape)
+	var low := SpinBox.new()
+	var high := SpinBox.new()
+	for box in [low, high]:
+		box.min_value = 0
+		box.max_value = 127
+		box.custom_minimum_size.x = 70
+	low.value = tl.low
+	high.value = tl.high
+	low.prefix = "low "
+	low.tooltip_text = "Lowest note this track shows (60 is middle C). Notes below are hidden, not deleted."
+	low.value_changed.connect(func(x): tl.low = int(x); tl.high = maxi(tl.high, tl.low); high.value = tl.high; app._changed())
+	row2.add_child(low)
+	high.prefix = "high "
+	high.tooltip_text = "Highest note this track shows. Notes above are hidden, not deleted."
+	high.value_changed.connect(func(x): tl.high = int(x); tl.low = mini(tl.low, tl.high); low.value = tl.low; app._changed())
+	row2.add_child(high)
 	var stacc := CheckBox.new()
 	stacc.text = "Dots"
 	stacc.button_pressed = tl.staccato
@@ -106,6 +122,18 @@ func _gui_input(e: InputEvent) -> void:
 	if e is InputEventMouseButton and e.pressed and e.double_click and e.button_index == MOUSE_BUTTON_LEFT \
 			and _name_label.get_global_rect().has_point(get_global_mouse_position()):
 		app.ask_rename(index)
+	elif e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT and not e.double_click:
+		# a click on the row's own background selects it (the controls keep their clicks)
+		var over := get_viewport().gui_get_hovered_control()
+		if over == self or (over is Label and over.get_parent() == self):
+			app.toggle_track_selected(index, e.ctrl_pressed or e.meta_pressed or e.shift_pressed)
+
+## Outlines the row when it's selected in the list.
+func set_selected(on: bool) -> void:
+	_sb.border_width_left = 3 if on else 0
+	_sb.border_width_right = 3 if on else 0
+	_sb.border_width_top = 3 if on else 0
+	_sb.border_width_bottom = 3 if on else 0
 
 ## Hold a track and drag it up or down the list: the whole row comes along.
 func _get_drag_data(at: Vector2) -> Variant:

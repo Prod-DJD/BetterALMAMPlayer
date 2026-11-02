@@ -2,11 +2,10 @@
 
 ## 1.0.8
 
-- Export now works the way the original ALMAMPlayer's did: a second, small copy of the app makes the video, at low priority, so your Mac and your other apps come first. The main window stays usable and shows the progress.
-- Each frame is drawn once by the engine's normal loop and read back (as Godot's Movie Maker does); nothing is forced or drawn twice, which is what overloaded the GPU and could restart the Mac.
-- The app now watches the export's real memory from outside (the operating system's own count, graphics memory included) and stops it if it passes 4 GB. The old check only saw part of it: a crash report showed the export at 26 GB while the check saw nothing wrong.
+- Exports run in the app again, as the original did: no second window or process. Each frame is drawn once, and the export stops if the app's own memory goes past 3 GB or the video's graphics memory past 5 GB.
+- New export choices: **Fast render** or **Best quality** for each format, and a **Reduce file size** checkbox that compresses harder at the same picture quality (slower to render). It is off for ProRes and HEVC, which have no such setting.
+
 - On a Mac the export draws with Metal instead of Apple's old OpenGL layer, which kept the graphics memory of every frame read back until the whole Mac locked up.
-- The export also stops if the whole Mac runs low on memory (graphics memory doesn't show in the app's own count).
 - The whole app now draws with Metal on a Mac (Vulkan or DirectX on Windows and Linux) instead of Apple's old OpenGL layer; phones are unchanged. The Mac froze even during plain playback under OpenGL.
 - Icons draw from shapes worked out once, instead of being re-split at every size (which failed on some and logged errors while playing).
 - Opening a song with a 24-bit WAV (what Logic bounces) is near instant: Godot took minutes to read those, so a 16-bit copy is made once by ffmpeg and kept.

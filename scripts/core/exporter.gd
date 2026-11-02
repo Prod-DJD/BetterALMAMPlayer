@@ -21,9 +21,6 @@ var _cancel := false
 var stale := 0
 ## Set when the export was stopped on purpose (it ran short of memory).
 var stop_reason := ""
-## When set, the export stops as soon as this file appears (how the app
-## stops a separate render process).
-var stop_file := ""
 
 ## An export that holds more than this is going wrong (a frame is a few MB and
 ## none are kept): stop it before it can slow or freeze the whole Mac.
@@ -128,6 +125,45 @@ func cancel() -> void:
 static func _mbps(height: int) -> int:
 	return 40 if height >= 2160 else (20 if height >= 1440 else 12)
 
+## The video encoder's settings for [param look]: a preset for each format and
+## quality. "Reduce file size" keeps each preset's picture quality (its crf or
+## bitrate target) and only makes the encoder work harder, so the file is
+## smaller and the render is slower.
+static func video_args(look: Look, out: String, height: int, alpha: bool) -> PackedStringArray:
+	var best := look.export_quality == "best"
+	var smaller := look.export_smaller and supports_smaller(look.export_format)
+	var format := alpha_codec_for(out, look.export_format) if alpha else "mp4"
+	match format:
+		"hevc":
+			# Apple's compact transparent video (macOS): bitrate-driven, so "best"
+			# asks for more bits and there's no "smaller" option
+			var mbps := int(_mbps(height) * (1.5 if best else 1.0))
+			return PackedStringArray(["-c:v", "hevc_videotoolbox", "-alpha_quality", "0.75",
+					"-tag:v", "hvc1", "-b:v", "%dM" % mbps, "-pix_fmt", "bgra"])
+		"vp9":
+			# alpha needs auto-alt-ref off; CRF with no bitrate cap. Lower crf is
+			# higher quality; lower cpu-used is the slower, smaller encode
+			var crf := 24 if best else 28
+			var effort := (0 if smaller else 1) if best else (2 if smaller else 4)
+			return PackedStringArray(["-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-b:v", "0",
+					"-crf", str(crf), "-auto-alt-ref", "0", "-row-mt", "1",
+					"-deadline", "good", "-cpu-used", str(effort)])
+		"prores":
+			# ProRes 4444 with alpha: Final Cut, Premiere, Resolve and After Effects read it
+			return PackedStringArray(["-c:v", "prores_ks", "-profile:v", "4444", "-pix_fmt", "yuva444p10le",
+					"-alpha_bits", "16", "-vendor", "apl0"])
+		_:
+			# MP4 on a background: crf is the quality, the preset the effort
+			var crf := 14 if best else 16
+			var preset := ("slower" if smaller else "slow") if best else ("slow" if smaller else "medium")
+			return PackedStringArray(["-c:v", "libx264", "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p",
+					"-movflags", "+faststart"])
+
+## Whether "Reduce file size" does anything for [param format] (ProRes and
+## HEVC don't have an effort setting that keeps their quality).
+static func supports_smaller(format: String) -> bool:
+	return format == "mp4" or format == "webm"
+
 ## Encoder threads: half the processor's cores (at least 2), so an export
 ## leaves the Mac room to breathe.
 static func _encoder_threads() -> int:
@@ -206,24 +242,7 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 		args.append_array(["-c:a", "libopus", "-b:a", "192k"] if webm else ["-c:a", "aac", "-b:a", "320k"])
 	if look.square:
 		args.append_array(["-vf", "crop=%d:%d" % [height, height]])
-	if alpha:
-		match alpha_codec_for(out, look.export_format):
-			"hevc":
-				# Apple's compact transparent video (macOS): smaller than ProRes
-				args.append_array(["-c:v", "hevc_videotoolbox", "-alpha_quality", "0.75",
-						"-tag:v", "hvc1", "-b:v", "%dM" % _mbps(height), "-pix_fmt", "bgra"])
-			"vp9":
-				# alpha needs auto-alt-ref off; CRF with no bitrate cap
-				args.append_array(["-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-b:v", "0",
-						"-crf", "28", "-auto-alt-ref", "0", "-row-mt", "1",
-						"-deadline", "good", "-cpu-used", "4"])
-			_:
-				# ProRes 4444 with alpha: Final Cut, Premiere, Resolve and After Effects read it
-				args.append_array(["-c:v", "prores_ks", "-profile:v", "4444", "-pix_fmt", "yuva444p10le",
-						"-alpha_bits", "16", "-vendor", "apl0"])
-	else:
-		args.append_array(["-c:v", "libx264", "-preset", "medium", "-crf", "16", "-pix_fmt", "yuv420p",
-				"-movflags", "+faststart"])
+	args.append_array(video_args(look, out, height, alpha))
 	args.append_array(["-threads", str(_encoder_threads()), "-t", "%.3f" % (end - start), out])
 	var proc := OS.execute_with_pipe(ff, args)
 	if proc.is_empty():
@@ -241,8 +260,6 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 	var prev_busy := false
 	var redrawn := 0
 	for i in frames:
-		if i % 10 == 0 and stop_file != "" and FileAccess.file_exists(stop_file):
-			_cancel = true
 		if _cancel or not OS.is_process_running(pid):
 			ok = false
 			break

@@ -64,6 +64,11 @@ var export_fps := 60
 ## biggest), "hevc" (.mov, much smaller, Apple apps) or "webm" (VP9, the
 ## smallest; browsers and some editors).
 var export_format := "mp4"
+## "fast" or "best": how hard the encoder works (best is slower, same format).
+var export_quality := "fast"
+## Compress harder for a smaller file at the same picture quality (slower to
+## render). Not offered for ProRes and HEVC, which have no such setting.
+var export_smaller := false
 var background := ""
 ## Track name → TrackLook
 var tracks := {}
@@ -95,7 +100,7 @@ func to_dict() -> Dictionary:
 		"top_margin": top_margin, "velocity_strength": velocity_strength,
 		"pitch_bend_strength": pitch_bend_strength, "audio_offset": audio_offset,
 			"glow": glow, "thickness": thickness, "icon_size": icon_size,
-		"square": square, "export_height": export_height, "export_fps": export_fps, "export_format": export_format, "background": background, "tracks": tr, "order": order,
+		"square": square, "export_height": export_height, "export_fps": export_fps, "export_format": export_format, "export_quality": export_quality, "export_smaller": export_smaller, "background": background, "tracks": tr, "order": order,
 	}
 
 static func from_dict(d: Dictionary) -> Look:
@@ -113,6 +118,8 @@ static func from_dict(d: Dictionary) -> Look:
 	l.export_height = int(d.get("export_height", 1080)) if int(d.get("export_height", 1080)) in [1080, 1440, 2160] else 1080
 	l.export_fps = int(d.get("export_fps", 60)) if int(d.get("export_fps", 60)) in [24, 30, 60, 120] else 60
 	l.export_format = str(d.get("export_format", "mp4")) if str(d.get("export_format", "mp4")) in ["mp4", "prores", "hevc", "webm"] else "mp4"
+	l.export_quality = "best" if str(d.get("export_quality", "fast")) == "best" else "fast"
+	l.export_smaller = bool(d.get("export_smaller", false))
 	l.background = str(d.get("background", ""))
 	var o = d.get("order", [])
 	if o is Array:

@@ -841,6 +841,7 @@ func _rebuild_track_panel() -> void:
 	# each control shows the first selected track's value and sets it on all
 	var tl0: Look.TrackLook = project.look.track_look(tr.name, first, song.tracks.size())
 	var color := ColorPickerButton.new()
+	TrackRow.close_on_hex_copy(color)
 	color.color = tl0.color
 	color.custom_minimum_size = Vector2(34, 26)
 	color.edit_alpha = false

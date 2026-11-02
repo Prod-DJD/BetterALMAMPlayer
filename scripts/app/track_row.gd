@@ -5,6 +5,31 @@
 class_name TrackRow
 extends PanelContainer
 
+## Makes a colour button's popup close once the hex code is copied from it
+## (Ctrl/Cmd+C in its hex box). The copy still happens: the popup closes after it.
+static func close_on_hex_copy(button: ColorPickerButton) -> void:
+	var popup := button.get_popup()
+	# the picker (and its hex box) is only built when the popup first opens: watch
+	# the boxes each time it is about to show, and watch each box once
+	var wire := func() -> void:
+		var fields := []
+		_find_line_edits(popup, fields)
+		for f in fields:
+			if f.has_meta("closes_popup"):
+				continue
+			f.set_meta("closes_popup", true)
+			f.gui_input.connect(func(e: InputEvent) -> void:
+				if e is InputEventKey and e.pressed and e.keycode == KEY_C and (e.ctrl_pressed or e.meta_pressed):
+					popup.call_deferred("hide"))
+	popup.about_to_popup.connect(wire)
+	popup.about_to_popup.connect(wire.call_deferred)
+
+static func _find_line_edits(node: Node, out: Array) -> void:
+	for c in node.get_children():
+		if c is LineEdit:
+			out.append(c)
+		_find_line_edits(c, out)
+
 var app
 var track: Song.Track
 var tl: Look.TrackLook
@@ -47,6 +72,7 @@ func setup(the_app, t: Song.Track, look: Look.TrackLook, i := 0) -> void:
 	_icon.clicked.connect(_open_picker)
 	row.add_child(_icon)
 	var color := ColorPickerButton.new()
+	close_on_hex_copy(color)
 	color.color = tl.color
 	color.custom_minimum_size = Vector2(34, 26)
 	color.edit_alpha = false

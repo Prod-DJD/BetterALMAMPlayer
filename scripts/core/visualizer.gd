@@ -22,22 +22,12 @@ var look: Look
 ## Draw on nothing: no black, no background picture, so the frame's
 ## transparent parts stay transparent (for an alpha video).
 var transparent := false
-## With [member transparent]: draw this solid color behind the notes (alpha 0:
-## nothing). An export renders each frame on black and on white and works the
-## exact transparency out from the pair, so it never depends on the graphics
-## card's own transparent drawing.
-var matte := Color(0, 0, 0, 0):
-	set(v):
-		matte = v
-		queue_redraw()
 ## How many notes the last picture drew (the exporter uses it to tell a
 ## frame with nothing on it from one that should be moving).
 var drawn := 0
 ## The time the last picture was actually drawn for (NAN before the first):
 ## the exporter checks it, so a frame is never saved with an older picture.
 var drawn_time := NAN
-## How many pictures have been drawn (the exporter waits for this to go up).
-var draw_count := 0
 ## Seconds into the song (negative: before it starts; the tracks rise in).
 var time := 0.0:
 	set(v):
@@ -114,11 +104,8 @@ static func _ease(x: float) -> float:
 
 func _draw() -> void:
 	drawn_time = time
-	draw_count += 1
 	if not transparent:
 		draw_rect(Rect2(0, 0, WIDTH, HEIGHT), Color.BLACK)
-	elif matte.a > 0.0:
-		draw_rect(Rect2(0, 0, WIDTH, HEIGHT), matte)
 	if look == null:
 		return
 	if not transparent:

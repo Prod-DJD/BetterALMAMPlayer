@@ -106,11 +106,10 @@ static func library_dir_in(line: String) -> String:
 ## the picture has been recorded for [param t] (usually one), so an older
 ## picture is never saved (that looked like stutter).
 func _render(vp: SubViewport, v: Visualizer, t: float) -> Image:
-	var before := v.draw_count
 	for attempt in 6:
 		vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 		await get_tree().process_frame
-		if v.draw_count > before and v.drawn_time == t:
+		if v.drawn_time == t:
 			break
 	if v.drawn_time != t:
 		stale += 1
@@ -148,13 +147,11 @@ static func video_args(look: Look, out: String, height: int, alpha: bool) -> Pac
 			var effort := (0 if smaller else 1) if best else (2 if smaller else 4)
 			return PackedStringArray(["-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-b:v", "0",
 					"-crf", str(crf), "-auto-alt-ref", "0", "-row-mt", "1",
-					"-deadline", "good", "-cpu-used", str(effort),
-					"-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709"])
+					"-deadline", "good", "-cpu-used", str(effort)])
 		"prores":
 			# ProRes 4444 with alpha: Final Cut, Premiere, Resolve and After Effects read it
 			return PackedStringArray(["-c:v", "prores_ks", "-profile:v", "4444", "-pix_fmt", "yuva444p10le",
-					"-alpha_bits", "16", "-vendor", "apl0",
-					"-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709"])
+					"-alpha_bits", "16", "-vendor", "apl0"])
 		_:
 			# MP4 on a background: crf is the quality, the preset the effort
 			var crf := 14 if best else 16
@@ -166,41 +163,6 @@ static func video_args(look: Look, out: String, height: int, alpha: bool) -> Pac
 ## HEVC don't have an effort setting that keeps their quality).
 static func supports_smaller(format: String) -> bool:
 	return format == "mp4" or format == "webm"
-
-## The pixel format a transparent video is encoded in.
-static func alpha_pix_fmt(codec: String) -> String:
-	match codec:
-		"hevc":
-			return "bgra"
-		"vp9":
-			return "yuva420p"
-	return "yuva444p10le"
-
-## ffmpeg's filter graph for a transparent export. The app sends two pictures per
-## frame, alternately: the frame on black, then on white (so frames 0, 2, 4…
-## are on black, 1, 3, 5… on white). Where the notes are see-through the two
-## differ: white minus black is what shows through, so alpha is
-## 255 - (white - black), and the color on black is color × alpha, which
-## divided by alpha gives the true color back (an alpha of 0 is held at 1 so
-## nothing divides by zero, and clear pixels come out black). Checked to within
-## 2/255 against a known picture. [param square] > 0 crops a square of that size.
-static func matte_graph(fps: int, square: int, codec: String) -> String:
-	var g := "[0:v]format=gbrp,split=2[a][b];"
-	g += "[a]select='not(mod(n,2))',setpts=N/(%d*TB),split=2[blk1][blk2];" % fps
-	g += "[b]select='mod(n,2)',setpts=N/(%d*TB)[wht];" % fps
-	g += "[blk2]extractplanes=g[bg];[wht]extractplanes=g[wg];"
-	g += "[wg][bg]blend=all_mode=subtract,negate,split=2[al1][al2];"
-	g += "[al1]lut=y='max(val,1)',split=3[ar][ag][ab];[ag][ab][ar]mergeplanes=0x001020:gbrp[alrgb];"
-	g += "[blk1][alrgb]blend=all_mode=divide[col];"
-	g += "[col][al2]alphamerge"
-	if square > 0:
-		g += ",crop=%d:%d" % [square, square]
-	if codec == "hevc":
-		g += ",format=bgra[v]"
-	else:
-		# Rec. 709, the standard for HD video, which editors assume
-		g += ",scale=out_color_matrix=bt709:out_range=tv,format=%s[v]" % alpha_pix_fmt(codec)
-	return g
 
 ## What to call [param format] in a message.
 static func format_name(format: String) -> String:
@@ -278,10 +240,7 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 	vp.size_2d_override_stretch = true
 	vp.render_target_update_mode = SubViewport.UPDATE_DISABLED # drawn only when a frame is asked for
 	var alpha := wants_alpha(out)
-	# never the graphics card's own transparency: a transparent export is two
-	# opaque pictures per frame (on black and on white), and ffmpeg works the
-	# exact alpha out from them
-	vp.transparent_bg = false
+	vp.transparent_bg = alpha
 	add_child(vp)
 	var v := Visualizer.new()
 	v.song = song
@@ -294,7 +253,7 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 	var frames := int(ceil((end - start) * fps))
 	var args := PackedStringArray([
 		"-y", "-hide_banner", "-loglevel", "error",
-		"-f", "rawvideo", "-pix_fmt", "rgba", "-s", "%dx%d" % [width, height], "-r", str(fps * 2 if alpha else fps), "-i", "-",
+		"-f", "rawvideo", "-pix_fmt", "rgba", "-s", "%dx%d" % [width, height], "-r", str(fps), "-i", "-",
 	])
 	var webm := out.to_lower().ends_with(".webm")
 	if audio != "" and FileAccess.file_exists(audio):
@@ -304,20 +263,12 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 			args.append_array(["-itsoffset", "%.4f" % at, "-i", audio])
 		else:
 			args.append_array(["-ss", "%.4f" % -at, "-i", audio])
-		args.append_array(["-map", "[v]" if alpha else "0:v", "-map", "1:a"])
+		args.append_array(["-map", "0:v", "-map", "1:a"])
 		# WebM carries Opus, the .mov files AAC
 		args.append_array(["-c:a", "libopus", "-b:a", "192k"] if webm else ["-c:a", "aac", "-b:a", "320k"])
-	if alpha:
-		var codec := alpha_codec_for(out, look.export_format)
-		args.append_array(["-filter_complex", matte_graph(fps, height if look.square else 0, codec)])
-		if audio == "" or not FileAccess.file_exists(audio):
-			args.append_array(["-map", "[v]"])
-	elif look.square:
+	if look.square:
 		args.append_array(["-vf", "crop=%d:%d" % [height, height]])
 	args.append_array(video_args(look, out, height, alpha))
-	if alpha:
-		# two pictures go in per frame (black, white) and one frame comes out
-		args.append_array(["-r", str(fps)])
 	args.append_array(["-threads", str(_encoder_threads()), "-t", "%.3f" % (end - start), out])
 	var proc := OS.execute_with_pipe(ff, args)
 	if proc.is_empty():
@@ -338,8 +289,6 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 		if _cancel or not OS.is_process_running(pid):
 			ok = false
 			break
-		if alpha:
-			v.matte = Color.BLACK
 		v.time = start + float(i) / fps
 		var t: float = v.time
 		var img: Image = await _render(vp, v, t)
@@ -353,7 +302,6 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 		var tries := 0
 		while busy and prev_busy and h == prev_hash and tries < 4:
 			tries += 1
-			v.queue_redraw() # a new draw to wait for
 			img = await _render(vp, v, t)
 			if img == null:
 				break
@@ -366,19 +314,6 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 		prev_hash = h
 		prev_busy = busy
 		pipe.store_buffer(img.get_data())
-		if alpha:
-			# the same frame again on white (the one above was on black)
-			v.matte = Color.WHITE
-			var on_white: Image = await _render(vp, v, t)
-			if on_white == null:
-				ok = false
-				break
-			pipe.store_buffer(on_white.get_data())
-			if i == 0:
-				# the first frame's two pictures, kept to see what the renderer made
-				# if a transparent export ever looks wrong (in the app's data folder)
-				img.save_png("user://last_export_on_black.png")
-				on_white.save_png("user://last_export_on_white.png")
 		if i % 15 == 0:
 			stop_reason = memory_trouble()
 			if stop_reason == "" and not await _wait_for_memory():

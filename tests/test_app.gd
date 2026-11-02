@@ -485,53 +485,6 @@ func _initialize() -> void:
 	app._show_format_hint()
 	check(app._format_hint != null and app._format_hint.text == Exporter.format_note("hevc"), "the hint under the menu follows the chosen format")
 	app.project.look.export_format = "mp4"
-	# ---- a transparent export keeps its alpha (rendered on black and on white, worked out by ffmpeg)
-	var tx_ff := Exporter.ffmpeg_path()
-	if tx_ff == "":
-		print("skipped: no ffmpeg for the transparency check")
-	else:
-		var tx_w := 32
-		var tx_h := 18
-		var tx_black := PackedByteArray()
-		var tx_white := PackedByteArray()
-		for y in tx_h:
-			for x in tx_w:
-				var rgba := [0, 0, 0, 0] # clear
-				if x < 10:
-					rgba = [255, 40, 40, 255] # a solid red note
-				elif x < 20:
-					rgba = [255, 40, 40, 120] # a soft red glow
-				var a: float = rgba[3] / 255.0
-				tx_black.append_array(PackedByteArray([roundi(rgba[0] * a), roundi(rgba[1] * a), roundi(rgba[2] * a), 255]))
-				tx_white.append_array(PackedByteArray([roundi(rgba[0] * a + 255.0 * (1.0 - a)), roundi(rgba[1] * a + 255.0 * (1.0 - a)), roundi(rgba[2] * a + 255.0 * (1.0 - a)), 255]))
-		var tx_dir := ProjectSettings.globalize_path("user://alpha_check")
-		DirAccess.make_dir_recursive_absolute(tx_dir)
-		var tx_in := FileAccess.open(tx_dir.path_join("in.rgba"), FileAccess.WRITE)
-		for k in 3:
-			tx_in.store_buffer(tx_black)
-			tx_in.store_buffer(tx_white)
-		tx_in.close()
-		var tx_log := []
-		var tx_enc := OS.execute(tx_ff, ["-hide_banner", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", "%dx%d" % [tx_w, tx_h],
-				"-r", "120", "-i", tx_dir.path_join("in.rgba"), "-filter_complex", Exporter.matte_graph(60, 0, "prores"), "-map", "[v]",
-				"-c:v", "prores_ks", "-profile:v", "4444", "-pix_fmt", "yuva444p10le", "-alpha_bits", "16", "-r", "60", tx_dir.path_join("out.mov")], tx_log, true)
-		check(tx_enc == 0, "the transparency graph encodes: %s" % str(tx_log))
-		var tx_count := []
-		OS.execute(tx_ff, ["-hide_banner", "-loglevel", "error", "-y", "-i", tx_dir.path_join("out.mov"), "-f", "null", "-"], tx_count, true)
-		var tx_frames := []
-		OS.execute(tx_ff, ["-hide_banner", "-i", tx_dir.path_join("out.mov"), "-map", "0:v:0", "-c", "copy", "-f", "null", "-"], tx_frames, true)
-		check(str(tx_frames).contains("frame=    3") or str(tx_frames).contains("frame=3"), "one frame comes out for each black and white pair (3 pairs in): %s" % str(tx_frames).right(120))
-		OS.execute(tx_ff, ["-hide_banner", "-loglevel", "error", "-y", "-i", tx_dir.path_join("out.mov"), "-vf", "scale=in_color_matrix=bt709:in_range=tv,format=rgba",
-				"-frames:v", "1", "-f", "rawvideo", tx_dir.path_join("back.rgba")], tx_log, true)
-		var tx_back := FileAccess.get_file_as_bytes(tx_dir.path_join("back.rgba"))
-		check(tx_back.size() == tx_w * tx_h * 4, "...and decodes to the picture's size (%d bytes)" % tx_back.size())
-		if tx_back.size() == tx_w * tx_h * 4:
-			var solid := (5 * tx_w + 4) * 4
-			var glow := (5 * tx_w + 15) * 4
-			var clear := (5 * tx_w + 26) * 4
-			check(tx_back[solid + 3] == 255 and absi(tx_back[solid] - 255) <= 3 and absi(tx_back[solid + 1] - 40) <= 3, "a solid note keeps full alpha and its color")
-			check(absi(tx_back[glow + 3] - 120) <= 2 and absi(tx_back[glow] - 255) <= 4 and absi(tx_back[glow + 1] - 40) <= 4, "a soft glow keeps its alpha (%d) and its true, un-darkened color (%d, %d)" % [tx_back[glow + 3], tx_back[glow], tx_back[glow + 1]])
-			check(tx_back[clear + 3] == 0, "where nothing is drawn the alpha is 0 (%d)" % tx_back[clear + 3])
 	# ---- the panels always fit in the smallest window
 	var lay_inner: Control = app._right.get_parent()
 	var lay_sum: float = app._left.get_combined_minimum_size().x + lay_inner.get_child(0).get_combined_minimum_size().x + app._right.get_combined_minimum_size().x

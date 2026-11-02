@@ -88,6 +88,16 @@ func spacing() -> float:
 func note_height() -> float:
 	return clampf(spacing() * 0.86 * look.thickness, 6.0, 44.0)
 
+## The same two, for one track: it may have its own vertical placement and thickness.
+func spacing_for(tl: Look.TrackLook) -> float:
+	if song == null:
+		return 10.0
+	var span: float = max(1, song.highest - song.lowest)
+	return (look.offset_of(tl) + look.top_margin_of(tl)) / span
+
+func note_height_for(tl: Look.TrackLook) -> float:
+	return clampf(spacing_for(tl) * 0.86 * look.thickness_of(tl), 6.0, 44.0)
+
 static func _ease(x: float) -> float:
 	x = clampf(x, 0.0, 1.0)
 	return 0.5 - 0.5 * cos(PI * x) # sine in-out, as the original's tweens
@@ -109,9 +119,6 @@ func _draw() -> void:
 	for i in range(count - 1, -1, -1):
 		var tr: Song.Track = song.tracks[i]
 		order.append([look.track_look(tr.name, i, count), tr])
-	var base_y := HEIGHT + look.vertical_offset
-	var gap := spacing()
-	var note_h := note_height()
 	# the tracks rise in over the first second
 	var intro := _ease((time + 1.0) / 0.5)
 	var intro_y := 128.0 * (1.0 - _ease((time + 1.5) / 1.0))
@@ -124,8 +131,14 @@ func _draw() -> void:
 			continue
 		var px_per_s: float = look.speed * tl.parallax
 		var color: Color = tl.color
+		# this track's own placement, thickness and reactions (or the scene's)
+		var base_y := HEIGHT + look.offset_of(tl)
+		var gap := spacing_for(tl)
+		var note_h := note_height_for(tl)
+		var vel_strength := look.velocity_of(tl)
+		var glow_amt := look.glow_of(tl)
 		var radius: float = [note_h / 2.0, note_h * 0.28, 2.0][tl.shape]
-		var bend := Song.bend_at(tr, time) * 4.0 * gap * look.pitch_bend_strength
+		var bend := Song.bend_at(tr, time) * 4.0 * gap * look.bend_of(tl)
 		# notes whose rectangle can reach the screen
 		var from_t := time - PLAYHEAD / px_per_s - tr.longest - 0.5
 		var to_t := time + PLAYHEAD / px_per_s + 0.1
@@ -140,7 +153,7 @@ func _draw() -> void:
 			var dur: float = n.end - n.start if not tl.staccato else 0.1
 			# the note lets go faster for a hard release (note-off velocity)
 			var release_t := 0.27
-			if look.velocity_strength >= 0.01 and n.release >= 0:
+			if vel_strength >= 0.01 and n.release >= 0:
 				release_t = lerpf(0.5, 0.1, n.release / 127.0)
 			var x := PLAYHEAD + (n.start - time) * px_per_s
 			var w: float = note_h * 1.2 if tl.staccato else max(dur * px_per_s, note_h * 0.9)
@@ -152,8 +165,8 @@ func _draw() -> void:
 			var light := 0.0
 			var dip := 0.0
 			var swell := 0.0
-			var dip_px := 6.0 if look.velocity_strength < 0.01 \
-					else 0.25 + n.velocity * look.velocity_strength * 0.7
+			var dip_px := 6.0 if vel_strength < 0.01 \
+					else 0.25 + n.velocity * vel_strength * 0.7
 			if on >= 0.0:
 				var off: float = time - (n.start + max(dur, 0.1))
 				var up := _ease(on / 0.17)
@@ -171,9 +184,9 @@ func _draw() -> void:
 			draw_set_transform(Vector2(x, y + dip), 0.0, Vector2.ONE * (1.0 + swell))
 			_body.bg_color = c
 			_body.set_corner_radius_all(int(w / 2.0) if tl.staccato else int(radius))
-			if lit > 0.02 and look.glow > 0.01:
-				_body.shadow_color = Color(color.r, color.g, color.b, 0.5 * look.glow * lit * intro)
-				_body.shadow_size = int(note_h * 0.95 * look.glow * lit)
+			if lit > 0.02 and glow_amt > 0.01:
+				_body.shadow_color = Color(color.r, color.g, color.b, 0.5 * glow_amt * lit * intro)
+				_body.shadow_size = int(note_h * 0.95 * glow_amt * lit)
 			else:
 				_body.shadow_size = 0
 			draw_style_box(_body, Rect2(0, -note_h / 2.0, w, note_h))
@@ -221,19 +234,19 @@ func _draw_effects(effects: Array) -> void:
 			var end := on - hold
 			s = lerpf(1.0, 0.0, clampf(end / 0.1667, 0.0, 1.0))
 			a = 1.0 - clampf((end - 0.0833) / (0.1458 - 0.0833), 0.0, 1.0)
-		if look.velocity_strength > 0.01:
+		if look.velocity_of(tl) > 0.01:
 			s *= 0.55 + n.velocity / 127.0 * 0.5
 		var col: Color = tl.color
 		var center := Vector2(PLAYHEAD, y)
-		var size: float = note_height() * 2.6 * look.icon_size * s
+		var size: float = note_height_for(tl) * 2.6 * look.icon_size_of(tl) * s
 		if size < 1.0:
 			continue
 		# a soft glow behind the icon: it reaches as far past the icon as a
 		# note's own glow reaches past the note (so it scales with thickness),
 		# and fades smoothly to nothing, no rings
-		var g := look.glow
+		var g := look.glow_of(tl)
 		if g > 0.01:
-			var reach := size * 0.5 + note_height() * (0.5 + 0.9 * g)
+			var reach := size * 0.5 + note_height_for(tl) * (0.5 + 0.9 * g)
 			draw_texture_rect(_glow_tex, Rect2(center - Vector2.ONE * reach, Vector2.ONE * reach * 2.0), false,
 					Color(col.r, col.g, col.b, minf(0.38 * g, 0.6) * a))
 		Icons.draw(self, kind, Rect2(center - Vector2.ONE * size / 2.0, Vector2.ONE * size), Color(

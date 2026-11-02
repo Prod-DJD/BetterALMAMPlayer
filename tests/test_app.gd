@@ -449,13 +449,24 @@ func _initialize() -> void:
 	var pt_tl: Look.TrackLook = app.project.look.track_look(app.song.tracks[1].name, 1, app.song.tracks.size())
 	pt_tl.parallax = 1.0
 	app._rebuild_track_panel()
-	var pt_depth: SpinBox = null
-	for row in app._track_box.get_children():
-		if row is VBoxContainer and row.get_child_count() == 2 and row.get_child(0) is Label and row.get_child(0).text == "Depth":
-			pt_depth = row.get_child(1)
+	var pt_depth: SpinBox = app._track_box.get_children().filter(func(r): return r is HBoxContainer and r.get_child_count() == 2 and r.get_child(0) is Label and r.get_child(0).text == "Depth (speed)").map(func(r): return r.get_child(1)).front()
 	check(pt_depth != null and absf(pt_depth.value - 1.0) < 0.001, "the track panel shows that track's depth")
 	pt_depth.value = 2.5
 	check(absf(pt_tl.parallax - 2.5) < 0.001, "changing it in the panel changes the track's look")
+	# a setting the track has of its own, over the scene's
+	var pt_scene_glow: float = app.project.look.glow
+	pt_tl.glow = NAN
+	app._rebuild_track_panel()
+	var pt_glow: SpinBox = app._track_box.get_children().filter(func(r): return r is HBoxContainer and r.get_child_count() == 2 and r.get_child(0) is Label and r.get_child(0).text == "Glow").map(func(r): return r.get_child(1)).front()
+	check(pt_glow != null and absf(pt_glow.value - pt_scene_glow) < 0.001, "a setting the track hasn't changed shows the scene's value")
+	pt_glow.value = 1.2
+	check(absf(pt_tl.glow - 1.2) < 0.001 and absf(app.project.look.glow - pt_scene_glow) < 0.001, "changing it in the panel gives that track its own, and the scene's is untouched")
+	check(absf(app.project.look.glow_of(pt_tl) - 1.2) < 0.001 and absf(app.project.look.glow_of(app.project.look.track_look(app.song.tracks[0].name, 0, app.song.tracks.size())) - pt_scene_glow) < 0.001, "the preview takes the track's own value, and other tracks keep the scene's")
+	var pt_round := Look.from_dict(JSON.parse_string(JSON.stringify(app.project.look.to_dict())))
+	var pt_back: Look.TrackLook = pt_round.tracks[app.song.tracks[1].name]
+	check(absf(pt_back.glow - 1.2) < 0.001 and is_nan(pt_back.thickness), "a track's own settings are saved, and the ones it hasn't changed stay empty")
+	pt_tl.glow = NAN
+	app._rebuild_track_panel()
 	pt_tl.color = Color(0.9, 0.1, 0.1)
 	app._changed()
 	check(app._editor.canvas.look.track_look(app.song.tracks[1].name, 1, app.song.tracks.size()).color == Color(0.9, 0.1, 0.1), "a colour change is seen by the note editor at once")

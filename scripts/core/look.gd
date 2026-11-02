@@ -9,6 +9,9 @@ extends RefCounted
 enum Shape { PILL, SOFT, SHARP }
 
 class TrackLook:
+	## The settings a track can have of its own, over the scene's.
+	const OWN := ["top_margin", "vertical_offset", "thickness", "glow", "icon_size", "velocity_strength", "pitch_bend_strength"]
+
 	var color := Color.WHITE
 	## How fast this track's notes move, relative to the scene speed
 	## (the depth effect). Who is in front is the track list's order.
@@ -22,12 +25,26 @@ class TrackLook:
 	## Only the notes between these pitches are shown (the track's range).
 	var low := 0
 	var high := 127
+	## The settings the scene has for every track, when this track wants its own
+	## (NAN: follow the scene). Where its notes sit, how thick they are and how
+	## they react.
+	var top_margin := NAN
+	var vertical_offset := NAN
+	var thickness := NAN
+	var glow := NAN
+	var icon_size := NAN
+	var velocity_strength := NAN
+	var pitch_bend_strength := NAN
 
 	func to_dict() -> Dictionary:
-		return {
+		var d := {
 			"color": color.to_html(), "parallax": parallax, "shape": shape,
 			"icon": icon, "staccato": staccato, "visible": visible, "low": low, "high": high,
 		}
+		for k in OWN:
+			if not is_nan(get(k)):
+				d[k] = get(k)
+		return d
 
 	static func from_dict(d: Dictionary, fallback: TrackLook) -> TrackLook:
 		var t := TrackLook.new()
@@ -39,6 +56,9 @@ class TrackLook:
 		t.visible = bool(d.get("visible", true))
 		t.low = clampi(int(d.get("low", 0)), 0, 127)
 		t.high = clampi(int(d.get("high", 127)), t.low, 127)
+		for k in OWN:
+			if d.has(k):
+				t.set(k, float(d[k]))
 		return t
 
 ## Pixels a second at parallax 1.
@@ -88,6 +108,22 @@ func track_look(name: String, i: int, count: int) -> TrackLook:
 	var t := default_track(i, count)
 	tracks[name] = t
 	return t
+
+## The value that applies to [param tl]: its own if it has one, else the scene's.
+func top_margin_of(tl: TrackLook) -> float:
+	return top_margin if is_nan(tl.top_margin) else tl.top_margin
+func offset_of(tl: TrackLook) -> float:
+	return vertical_offset if is_nan(tl.vertical_offset) else tl.vertical_offset
+func thickness_of(tl: TrackLook) -> float:
+	return thickness if is_nan(tl.thickness) else tl.thickness
+func glow_of(tl: TrackLook) -> float:
+	return glow if is_nan(tl.glow) else tl.glow
+func icon_size_of(tl: TrackLook) -> float:
+	return icon_size if is_nan(tl.icon_size) else tl.icon_size
+func velocity_of(tl: TrackLook) -> float:
+	return velocity_strength if is_nan(tl.velocity_strength) else tl.velocity_strength
+func bend_of(tl: TrackLook) -> float:
+	return pitch_bend_strength if is_nan(tl.pitch_bend_strength) else tl.pitch_bend_strength
 
 static func default_track(i: int, count: int) -> TrackLook:
 	var t := TrackLook.new()

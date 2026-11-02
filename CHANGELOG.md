@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.11
+
+- **Per-track settings.** Selecting tracks gives the right-hand panel sliders for those tracks alone: where their notes sit (notes reach up to, lowest note sits at), thickness, glow, icon size, velocity effect and pitch bend, plus depth and the lowest and highest note shown. A setting a track hasn't changed follows the scene (its label turns gold once it's the track's own); double-click a slider to follow the scene again. They are saved with the song's look.
+- The empty preview's text wraps to the room it has, and its size follows the preview's width, instead of one long cut-off line.
+- Checked the whole window for anything cut off, at the minimum size and in every state (empty, song loaded, tracks selected, the note editor): nothing runs past its container now. The one thing found, the "1 track selected" text, got more room.
+
 ## 1.0.10
 
 - Selecting a track in the list shows that track's own settings on the right (colour, depth, shape, dots, show in preview, and its note range), in place of the scene's sliders. With several tracks selected, a change applies to all of them. Deselecting brings the scene back.

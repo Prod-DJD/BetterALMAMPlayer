@@ -226,7 +226,7 @@ func _build() -> void:
 	top.add_child(_edit_btn)
 	_status = Label.new()
 	_status.add_theme_color_override("font_color", TEXT_DIM)
-	_status.custom_minimum_size.x = 110 # a long message trims; it never widens the window
+	_status.custom_minimum_size.x = 150 # a long message trims; it never widens the window
 	_status.clip_text = true
 	_status.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -378,23 +378,34 @@ func _button(text: String, on: Callable, tip := "") -> Button:
 	return b
 
 func _make_empty() -> Control:
-	var c := CenterContainer.new()
+	# the text wraps to the room the preview has, and its size follows the width
+	var c := MarginContainer.new()
+	for side in ["left", "right", "top", "bottom"]:
+		c.add_theme_constant_override("margin_" + side, 20)
 	var v := VBoxContainer.new()
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
 	v.add_theme_constant_override("separation", 12)
 	c.add_child(v)
 	var l := Label.new()
 	l.text = "Drop a MIDI file or a project (FL Studio, Ableton, Logic) here."
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.add_theme_font_size_override("font_size", 20)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.custom_minimum_size.x = 1 # wraps to the room there is; never widens the preview
 	v.add_child(l)
 	var hint := Label.new()
 	hint.text = "Every MIDI track is found by itself. A sound file named like the song (song.mid + song.mp3) is picked up too."
 	hint.add_theme_color_override("font_color", TEXT_DIM)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint.custom_minimum_size.x = 1
 	v.add_child(hint)
 	var b := _button("Open a song…", _open_dialog)
 	b.size_flags_horizontal = SIZE_SHRINK_CENTER
 	v.add_child(b)
+	c.resized.connect(func():
+		var w := c.size.x
+		l.add_theme_font_size_override("font_size", clampi(int(w / 26.0), 14, 22))
+		hint.add_theme_font_size_override("font_size", clampi(int(w / 38.0), 11, 15)))
 	return c
 
 func _show_empty() -> void:
@@ -830,9 +841,11 @@ func _rebuild_tracks() -> void:
 
 var _track_box: VBoxContainer
 
-## The right panel while tracks are selected: each setting of the selected
-## track (or of all of them, when several are selected, and a change applies to
-## every one). The scene's settings come back when nothing is selected.
+## The right panel while tracks are selected: the track's own version of the
+## scene's settings (where its notes sit, how thick, the glow, the icon, how it
+## reacts), its depth and its note range. With several tracks selected, a change
+## applies to every one. A setting the track hasn't changed follows the scene;
+## double-click one to make it follow the scene again.
 func _rebuild_track_panel() -> void:
 	if _track_box == null:
 		return
@@ -840,27 +853,29 @@ func _rebuild_track_panel() -> void:
 	_scene_box.visible = picked.is_empty()
 	_track_box.visible = not picked.is_empty()
 	for c in _track_box.get_children():
+		_track_box.remove_child(c) # gone now, not at the end of the frame (the new ones go in at once)
 		c.queue_free()
 	if picked.is_empty() or project == null:
 		return
 	var first: int = picked[0]
 	var tr: Song.Track = song.tracks[first]
+	var l := project.look
 	var head := Label.new()
 	head.text = tr.name if picked.size() == 1 else "%d tracks selected" % picked.size()
 	head.add_theme_font_size_override("font_size", 16)
 	head.clip_text = true
+	head.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	head.tooltip_text = head.text
 	_track_box.add_child(head)
 	var hint := Label.new()
-	hint.text = "Changes apply to every selected track." if picked.size() > 1 else "Click the track again (or Esc) to get the scene back."
+	hint.text = ("Changes apply to every selected track. " if picked.size() > 1 else "") + "Double-click a slider to follow the scene again."
 	hint.add_theme_font_size_override("font_size", 12)
 	hint.add_theme_color_override("font_color", Color(1, 1, 1, 0.45))
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.custom_minimum_size.x = 1
 	_track_box.add_child(hint)
+	var tl0: Look.TrackLook = _track_look_of(first)
 
-	# each control shows the first selected track's value and sets it on all
-	var tl0: Look.TrackLook = project.look.track_look(tr.name, first, song.tracks.size())
 	var color := ColorPickerButton.new()
 	TrackRow.close_on_hex_copy(color)
 	color.color = tl0.color
@@ -871,25 +886,13 @@ func _rebuild_track_panel() -> void:
 			_track_look_of(i).color = c
 		_changed())
 	_track_box.add_child(_row("Color", color))
-	var depth := SpinBox.new()
-	depth.min_value = 0.1
-	depth.max_value = 4.0
-	depth.step = 0.02
-	depth.value = tl0.parallax
-	depth.suffix = "×"
-	depth.tooltip_text = "How fast this track moves (more is faster). The list's order sets who is in front."
-	depth.value_changed.connect(func(x):
-		for i in picked:
-			_track_look_of(i).parallax = x
-		_changed())
-	_track_box.add_child(_row("Depth", depth))
 	var shape := OptionButton.new()
-	for s in ["Pill", "Soft", "Sharp"]:
-		shape.add_item(s)
+	for sh in ["Pill", "Soft", "Sharp"]:
+		shape.add_item(sh)
 	shape.selected = tl0.shape
-	shape.item_selected.connect(func(s):
+	shape.item_selected.connect(func(v):
 		for i in picked:
-			_track_look_of(i).shape = s
+			_track_look_of(i).shape = v
 		_changed())
 	_track_box.add_child(_row("Shape", shape))
 	var dots := CheckBox.new()
@@ -908,36 +911,91 @@ func _rebuild_track_panel() -> void:
 			_track_look_of(i).visible = on
 		_changed())
 	_track_box.add_child(_row("Track", shown))
-	var low := SpinBox.new()
-	var high := SpinBox.new()
-	for box in [low, high]:
-		box.min_value = 0
-		box.max_value = 127
-		box.custom_minimum_size.x = 80
-	low.value = tl0.low
-	high.value = tl0.high
-	low.value_changed.connect(func(x):
+
+	# the scene's settings, for this track alone
+	_track_box.add_child(_section("Just for this track" if picked.size() == 1 else "Just for these tracks"))
+	var depth_default := Look.default_track(first, song.tracks.size()).parallax
+	_track_slider("Depth (speed)", 0.1, 4.0, 0.02, tl0.parallax, depth_default,
+			func(i, v): _track_look_of(i).parallax = v, func(i): _track_look_of(i).parallax = depth_default, "×", false)
+	_track_slider("Notes reach up to", 200, 1080, 1, l.top_margin_of(tl0), l.top_margin,
+			func(i, v): _track_look_of(i).top_margin = v, func(i): _track_look_of(i).top_margin = NAN, "px", not is_nan(tl0.top_margin))
+	_track_slider("Lowest note sits at", 0, 700, 1, -l.offset_of(tl0), -l.vertical_offset,
+			func(i, v): _track_look_of(i).vertical_offset = -v, func(i): _track_look_of(i).vertical_offset = NAN, "px up", not is_nan(tl0.vertical_offset))
+	_track_slider("Note thickness", 0.4, 2.0, 0.01, l.thickness_of(tl0), l.thickness,
+			func(i, v): _track_look_of(i).thickness = v, func(i): _track_look_of(i).thickness = NAN, "×", not is_nan(tl0.thickness))
+	_track_slider("Glow", 0.0, 1.5, 0.01, l.glow_of(tl0), l.glow,
+			func(i, v): _track_look_of(i).glow = v, func(i): _track_look_of(i).glow = NAN, "×", not is_nan(tl0.glow))
+	_track_slider("Icon size", 0.4, 4.0, 0.05, l.icon_size_of(tl0), l.icon_size,
+			func(i, v): _track_look_of(i).icon_size = v, func(i): _track_look_of(i).icon_size = NAN, "×", not is_nan(tl0.icon_size))
+	_track_slider("Velocity effect", 0.0, 1.0, 0.01, l.velocity_of(tl0), l.velocity_strength,
+			func(i, v): _track_look_of(i).velocity_strength = v, func(i): _track_look_of(i).velocity_strength = NAN, "", not is_nan(tl0.velocity_strength))
+	_track_slider("Pitch bend", 0.0, 2.0, 0.01, l.bend_of(tl0), l.pitch_bend_strength,
+			func(i, v): _track_look_of(i).pitch_bend_strength = v, func(i): _track_look_of(i).pitch_bend_strength = NAN, "", not is_nan(tl0.pitch_bend_strength))
+	_track_box.add_child(_section("Notes shown"))
+	_track_slider("Lowest note", 0, 127, 1, tl0.low, 0,
+			func(i, v):
+				var t := _track_look_of(i)
+				t.low = int(v)
+				t.high = maxi(t.high, t.low),
+			func(i): _track_look_of(i).low = 0, "", tl0.low > 0)
+	_track_slider("Highest note", 0, 127, 1, tl0.high, 127,
+			func(i, v):
+				var t := _track_look_of(i)
+				t.high = int(v)
+				t.low = mini(t.low, t.high),
+			func(i): _track_look_of(i).high = 127, "", tl0.high < 127)
+
+## One slider of the track panel: [param value] now, [param scene_value] when it
+## follows the scene again (double-click), [param set_one] and [param reset_one]
+## called with a track's position (for each selected track).
+func _track_slider(label: String, lo: float, hi: float, step: float, value: float, scene_value: float,
+		set_one: Callable, reset_one: Callable, unit: String, own: bool) -> void:
+	var picked: Array = selected_tracks.filter(func(i): return song != null and i >= 0 and i < song.tracks.size())
+	var head := HBoxContainer.new()
+	var l := Label.new()
+	l.text = label
+	l.size_flags_horizontal = SIZE_EXPAND_FILL
+	l.custom_minimum_size.x = 40
+	l.clip_text = true
+	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	l.tooltip_text = label
+	l.mouse_filter = MOUSE_FILTER_STOP
+	var dim := Color(1, 1, 1, 0.85)
+	var accent := Color("f7b955") # a setting this track has changed
+	l.add_theme_color_override("font_color", accent if own else dim)
+	head.add_child(l)
+	var num := SpinBox.new()
+	num.min_value = lo
+	num.max_value = hi
+	num.step = step
+	num.suffix = unit
+	num.custom_minimum_size.x = 96
+	num.value = value
+	head.add_child(num)
+	_track_box.add_child(head)
+	var sl := HSlider.new()
+	sl.min_value = lo
+	sl.max_value = hi
+	sl.step = step
+	sl.value = value
+	sl.tooltip_text = "Double-click to follow the scene again"
+	_track_box.add_child(sl)
+	var apply := func(v: float):
 		for i in picked:
-			var t := _track_look_of(i)
-			t.low = int(x)
-			t.high = maxi(t.high, t.low)
-		high.set_value_no_signal(_track_look_of(first).high)
-		_changed())
-	high.value_changed.connect(func(x):
+			set_one.call(i, v)
+		l.add_theme_color_override("font_color", accent)
+		_changed()
+	sl.value_changed.connect(func(v): num.set_value_no_signal(v); apply.call(v))
+	num.value_changed.connect(func(v): sl.set_value_no_signal(v); apply.call(v))
+	var reset := func():
 		for i in picked:
-			var t := _track_look_of(i)
-			t.high = int(x)
-			t.low = mini(t.low, t.high)
-		low.set_value_no_signal(_track_look_of(first).low)
-		_changed())
-	var range_row := HBoxContainer.new()
-	range_row.add_theme_constant_override("separation", 6)
-	for box in [low, high]:
-		box.custom_minimum_size.x = 0
-		box.size_flags_horizontal = SIZE_EXPAND_FILL
-	range_row.add_child(low)
-	range_row.add_child(high)
-	_track_box.add_child(_row("Notes from / to", range_row))
+			reset_one.call(i)
+		sl.set_value_no_signal(scene_value)
+		num.set_value_no_signal(scene_value)
+		l.add_theme_color_override("font_color", dim)
+		_changed()
+	sl.gui_input.connect(func(e): if e is InputEventMouseButton and e.double_click and e.button_index == MOUSE_BUTTON_LEFT: reset.call())
+	l.gui_input.connect(func(e): if e is InputEventMouseButton and e.double_click and e.button_index == MOUSE_BUTTON_LEFT: reset.call())
 
 ## The look of track position [i] (its saved look, made if it wasn't).
 func _track_look_of(i: int) -> Look.TrackLook:

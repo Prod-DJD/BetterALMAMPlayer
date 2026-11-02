@@ -202,6 +202,32 @@ static func matte_graph(fps: int, square: int, codec: String) -> String:
 		g += ",scale=out_color_matrix=bt709:out_range=tv,format=%s[v]" % alpha_pix_fmt(codec)
 	return g
 
+## What to call [param format] in a message.
+static func format_name(format: String) -> String:
+	match format:
+		"prores":
+			return "ProRes 4444"
+		"hevc":
+			return "HEVC (Apple only)"
+		"webm":
+			return "WebM VP9"
+	return "MP4"
+
+## A line about who can read [param format], for the export panel. The
+## transparent ones aren't all read by every program: HEVC's transparency is
+## Apple's own (Premiere Pro and DaVinci Resolve show it as a solid background,
+## though Finder and QuickTime show it clear), so a ProRes 4444 is the one to
+## give an editor.
+static func format_note(format: String) -> String:
+	match format:
+		"prores":
+			return "Works in Premiere Pro, After Effects, Final Cut Pro and DaVinci Resolve. Big files."
+		"hevc":
+			return "Small, but only Apple's own apps (QuickTime, Finder, Final Cut, Safari) read its transparency. Premiere Pro and DaVinci Resolve show a solid background: choose ProRes 4444 for them."
+		"webm":
+			return "The smallest. Browsers and OBS read its transparency; most editors don't."
+	return "On a black background (or your picture). Plays anywhere."
+
 ## Encoder threads: half the processor's cores (at least 2), so an export
 ## leaves the Mac room to breathe.
 static func _encoder_threads() -> int:

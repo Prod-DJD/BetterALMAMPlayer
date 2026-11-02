@@ -477,6 +477,14 @@ func _initialize() -> void:
 	check(app._editor.get_parent() is HSplitContainer or app._editor.get_parent().get_parent() is HSplitContainer, "the preview sits in a resizable split")
 	app._remember_panels()
 	check(Project.state().has("panel_left") and Project.state().has("panel_right"), "the panel widths are remembered")
+	# ---- the export panel says who can read each format
+	check(Exporter.format_note("hevc").contains("Premiere") and Exporter.format_note("hevc").contains("ProRes"), "the HEVC note warns that Premiere shows it solid and points to ProRes")
+	check(Exporter.format_note("prores").contains("Premiere") and not Exporter.format_note("prores").contains("solid"), "the ProRes note says Premiere reads it")
+	check(Exporter.format_name("prores") == "ProRes 4444" and Exporter.format_name("hevc").contains("Apple") and Exporter.format_name("mp4") == "MP4", "the saved message names the format written")
+	app.project.look.export_format = "hevc"
+	app._show_format_hint()
+	check(app._format_hint != null and app._format_hint.text == Exporter.format_note("hevc"), "the hint under the menu follows the chosen format")
+	app.project.look.export_format = "mp4"
 	# ---- a transparent export keeps its alpha (rendered on black and on white, worked out by ffmpeg)
 	var tx_ff := Exporter.ffmpeg_path()
 	if tx_ff == "":

@@ -1422,14 +1422,21 @@ func _rebuild_scene() -> void:
 	_scene_box.add_child(qrow)
 	var fmt := _dropdown()
 	var formats := ["mp4", "prores", "hevc", "webm"]
-	fmt.add_item("MP4 (plays anywhere)", 0)
-	fmt.add_item("MOV transparent: ProRes 4444 (big)", 1)
-	fmt.add_item("MOV transparent: HEVC (small, Apple)", 2)
-	fmt.add_item("WebM transparent: VP9 (smallest)", 3)
+	fmt.add_item("MP4 · plays anywhere", 0)
+	fmt.add_item("MOV · ProRes 4444, transparent", 1)
+	fmt.add_item("MOV · HEVC, transparent (Apple only)", 2)
+	fmt.add_item("WebM · VP9, transparent", 3)
 	fmt.select(maxi(formats.find(l.export_format), 0))
 	fmt.tooltip_text = "MP4 is on a black (or picture) background. The transparent ones drop the background so the notes sit straight on other footage, no keying."
-	fmt.item_selected.connect(func(i): l.export_format = formats[i]; _refresh_quality(); _changed())
+	_format_hint = Label.new()
+	_format_hint.add_theme_font_size_override("font_size", 12)
+	_format_hint.add_theme_color_override("font_color", Color(1, 1, 1, 0.55))
+	_format_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_format_hint.custom_minimum_size.x = 1
+	fmt.item_selected.connect(func(i): l.export_format = formats[i]; _refresh_quality(); _show_format_hint(); _changed())
 	_scene_box.add_child(fmt)
+	_scene_box.add_child(_format_hint)
+	_show_format_hint()
 	var qrow2 := HBoxContainer.new()
 	_quality = _dropdown()
 	_quality.add_item("Fast render", 0)
@@ -1745,6 +1752,15 @@ func _revert_edits() -> void:
 # ---------------------------------------------------------------- export
 
 var _quality: OptionButton
+var _format_hint: Label
+
+## Says who can read the chosen format, under the format menu: HEVC's
+## transparency is Apple's own, so Premiere Pro and DaVinci Resolve show it as
+## a solid background (the file looks transparent in Finder and QuickTime).
+func _show_format_hint() -> void:
+	if _format_hint == null or project == null:
+		return
+	_format_hint.text = Exporter.format_note(project.look.export_format)
 var _smaller: CheckBox
 
 ## The quality and size choices fit the chosen format: ProRes always writes its
@@ -1837,7 +1853,7 @@ func _on_export_finished(ok: bool, message: String) -> void:
 	_export_bar.visible = false
 	_export_btn.text = "Export video…"
 	if ok:
-		_status.text = "Video saved"
+		_status.text = "Saved · " + Exporter.format_name(project.look.export_format) if project else "Video saved"
 		if not Array(OS.get_cmdline_user_args()).any(func(a): return a.begins_with("--render")):
 			OS.shell_show_in_file_manager(message)
 	else:

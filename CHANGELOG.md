@@ -3,6 +3,7 @@
 ## 1.0.11
 
 - **Per-track settings.** Selecting tracks gives the right-hand panel sliders for those tracks alone: where their notes sit (notes reach up to, lowest note sits at), thickness, glow, icon size, velocity effect and pitch bend, plus depth and the lowest and highest note shown. A setting a track hasn't changed follows the scene (its label turns gold once it's the track's own); double-click a slider to follow the scene again. They are saved with the song's look.
+- A ProRes export carries its sound as uncompressed 24-bit PCM (editors read it at once, without AAC's start-up delay); the other formats keep AAC or Opus.
 - **Audio in exports lines up in Premiere Pro.** The sound's delay was stored as a timestamp offset, which Premiere Pro ignores: it played the sound from the start while the notes waited. The delay is now written into the sound as silence, which every program reads the same way.
 - **The export panel now says which programs read each format.** A "transparent" video that looked solid in Premiere Pro was an HEVC export: its transparency is Apple's own, so Finder and QuickTime show it clear while Premiere Pro and DaVinci Resolve show a solid background. ProRes 4444 is the one for editors (tested in Premiere Pro). The menu names are shorter, a line under it says who can read the chosen format, and the "Saved" message names the format written.
 - The empty preview's text wraps to the room it has, and its size follows the preview's width, instead of one long cut-off line.

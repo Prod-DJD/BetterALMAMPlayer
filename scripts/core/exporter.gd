@@ -268,8 +268,15 @@ func run(song: Song, look: Look, audio: String, out: String, fps := FPS_DEFAULT,
 		else:
 			args.append_array(["-ss", "%.4f" % -at, "-i", audio])
 		args.append_array(["-map", "0:v", "-map", "1:a"])
-		# WebM carries Opus, the .mov files AAC
-		args.append_array(["-c:a", "libopus", "-b:a", "192k"] if webm else ["-c:a", "aac", "-b:a", "320k"])
+		# WebM carries Opus; a ProRes .mov carries the sound uncompressed (24-bit
+		# PCM: editors read it at once, with none of AAC's start-up delay or
+		# edit-list quirks), the other .mov files AAC
+		if webm:
+			args.append_array(["-c:a", "libopus", "-b:a", "192k"])
+		elif alpha and alpha_codec_for(out, look.export_format) == "prores":
+			args.append_array(["-c:a", "pcm_s24le"])
+		else:
+			args.append_array(["-c:a", "aac", "-b:a", "320k"])
 	if look.square:
 		args.append_array(["-vf", "crop=%d:%d" % [height, height]])
 	args.append_array(video_args(look, out, height, alpha))
